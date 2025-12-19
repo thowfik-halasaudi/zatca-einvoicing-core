@@ -4,9 +4,10 @@ import { SignInvoiceDto } from "./dto/sign-invoice.dto";
 @Injectable()
 export class XmlTemplateService {
   /**
-   * Generates a base UBL 2.1 XML for a Simplified Tax Invoice using the provided DTO.
+   * Generates a base UBL 2.1 XML for any ZATCA Invoice using the provided DTO.
+   * Supports Standard/Simplified and Invoice/Credit/Debit scenarios.
    */
-  generateSimplifiedInvoiceXml(dto: SignInvoiceDto): string {
+  generateInvoiceXml(dto: SignInvoiceDto): string {
     console.log("\n[XML GEN] 🏗️  Building Base UBL 2.1 XML from PMS Data...");
 
     const { egs, invoice, supplier, customer, lineItems, totals } = dto;
@@ -25,18 +26,18 @@ export class XmlTemplateService {
     const finalDate = invoice.issueDate || now.toISOString().split("T")[0];
     const finalTime = invoice.issueTime || now.toTimeString().split(" ")[0];
 
-    if (!invoice.issueDate || !invoice.issueTime) {
-      console.log(`ℹ️  Using current server time: ${finalDate} ${finalTime}`);
-    }
+    // Determine Logic Flags
+    const isStandard = invoice.invoiceTypeCodeName?.startsWith("01") || false;
+    const isNote =
+      invoice.invoiceTypeCode === "381" || invoice.invoiceTypeCode === "383";
 
+    console.log(
+      `📍 Type: ${isStandard ? "STANDARD" : "SIMPLIFIED"} | Code: ${invoice.invoiceTypeCode || "388"}`
+    );
     console.log(`📍 Line Items to process: ${lineItems.length}`);
 
     const lineItemsXml = lineItems
       .map((item, index) => {
-        console.log(
-          `  🔹 Line ${item.lineId}: ${item.description} | Ext: ${item.taxExclusiveAmount.toFixed(2)} | Tax: ${item.vatAmount.toFixed(2)}`
-        );
-
         return `
     <cac:InvoiceLine>
         <cbc:ID>${item.lineId}</cbc:ID>
@@ -63,6 +64,56 @@ export class XmlTemplateService {
       })
       .join("");
 
+    // Billing Reference (For Credit/Debit Notes)
+    const billingReferenceXml =
+      isNote && invoice.billingReferenceId
+        ? `
+    <cac:BillingReference>
+        <cac:InvoiceDocumentReference>
+            <cbc:ID>${invoice.billingReferenceId}</cbc:ID>
+        </cac:InvoiceDocumentReference>
+    </cac:BillingReference>`
+        : "";
+
+    // Customer Party (Full details for Standard, Basic for Simplified)
+    let customerPartyXml = "";
+    if (isStandard && customer) {
+      customerPartyXml = `
+    <cac:AccountingCustomerParty>
+        <cac:Party>
+            ${
+              customer.vatNumber
+                ? `
+            <cac:PartyTaxScheme>
+                <cbc:CompanyID>${customer.vatNumber}</cbc:CompanyID>
+                <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+            </cac:PartyTaxScheme>`
+                : ""
+            }
+            <cac:PartyLegalEntity>
+                <cbc:RegistrationName>${customer.registrationName || customer.name || "Customer"}</cbc:RegistrationName>
+            </cac:PartyLegalEntity>
+            <cac:PostalAddress>
+                <cbc:StreetName>${customer.address?.street || "Street"}</cbc:StreetName>
+                <cbc:BuildingNumber>${customer.address?.buildingNumber || "0000"}</cbc:BuildingNumber>
+                <cbc:CitySubdivisionName>${customer.address?.district || "District"}</cbc:CitySubdivisionName>
+                <cbc:CityName>${customer.address?.city || "City"}</cbc:CityName>
+                <cbc:PostalZone>${customer.address?.postalCode || "00000"}</cbc:PostalZone>
+                <cac:Country><cbc:IdentificationCode>${customer.address?.country || "SA"}</cbc:IdentificationCode></cac:Country>
+            </cac:PostalAddress>
+        </cac:Party>
+    </cac:AccountingCustomerParty>`;
+    } else {
+      customerPartyXml = `
+    <cac:AccountingCustomerParty>
+        <cac:Party>
+            <cac:PartyLegalEntity>
+                <cbc:RegistrationName>${customer?.name || "Walk-in Guest"}</cbc:RegistrationName>
+            </cac:PartyLegalEntity>
+        </cac:Party>
+    </cac:AccountingCustomerParty>`;
+    }
+
     // Base template
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2">
@@ -79,9 +130,9 @@ export class XmlTemplateService {
     <cbc:UUID>${invoice.uuid || "8e354912-7474-42b6-aa6d-519267bb6c22"}</cbc:UUID>
     <cbc:IssueDate>${finalDate}</cbc:IssueDate>
     <cbc:IssueTime>${finalTime}</cbc:IssueTime>
-    <cbc:InvoiceTypeCode name="0211010">388</cbc:InvoiceTypeCode>
+    <cbc:InvoiceTypeCode name="${invoice.invoiceTypeCodeName || (isStandard ? "0111010" : "0211010")}">${invoice.invoiceTypeCode || "388"}</cbc:InvoiceTypeCode>
     <cbc:DocumentCurrencyCode>${invoice.currency || "SAR"}</cbc:DocumentCurrencyCode>
-    <cbc:TaxCurrencyCode>${invoice.currency || "SAR"}</cbc:TaxCurrencyCode>
+    <cbc:TaxCurrencyCode>${invoice.currency || "SAR"}</cbc:TaxCurrencyCode>${billingReferenceXml}
     <cac:AdditionalDocumentReference>
         <cbc:ID>ICV</cbc:ID>
         <cbc:UUID>${invoice.invoiceCounterNumber}</cbc:UUID>
@@ -110,7 +161,7 @@ export class XmlTemplateService {
             <cac:PostalAddress>
                 <cbc:StreetName>${supplier.address.street || "Main St"}</cbc:StreetName>
                 <cbc:BuildingNumber>${supplier.address.buildingNumber || "1234"}</cbc:BuildingNumber>
-                <cbc:PlotIdentification>${supplier.address.district || "1234"}</cbc:PlotIdentification>
+                <cbc:PlotIdentification>${supplier.address.district || "0000"}</cbc:PlotIdentification>
                 <cbc:CitySubdivisionName>${supplier.address.district || "Sub Name"}</cbc:CitySubdivisionName>
                 <cbc:CityName>${supplier.address.city || "Riyadh"}</cbc:CityName>
                 <cbc:PostalZone>${supplier.address.postalCode || "12345"}</cbc:PostalZone>
@@ -128,14 +179,7 @@ export class XmlTemplateService {
                 <cbc:RegistrationName>${supplier.registrationName}</cbc:RegistrationName>
             </cac:PartyLegalEntity>
         </cac:Party>
-    </cac:AccountingSupplierParty>
-    <cac:AccountingCustomerParty>
-        <cac:Party>
-            <cac:PartyLegalEntity>
-                <cbc:RegistrationName>${customer?.name || "Walk-in Guest"}</cbc:RegistrationName>
-            </cac:PartyLegalEntity>
-        </cac:Party>
-    </cac:AccountingCustomerParty>
+    </cac:AccountingSupplierParty>${customerPartyXml}
     <cac:TaxTotal>
         <cbc:TaxAmount currencyID="${invoice.currency || "SAR"}">${totals.vatTotal.toFixed(2)}</cbc:TaxAmount>
         <cac:TaxSubtotal>
@@ -163,10 +207,6 @@ export class XmlTemplateService {
 </Invoice>`;
 
     console.log("✅ [XML GEN] Base XML structure assembled.");
-    console.log(
-      `📊 Totals -> Subtotal: ${totals.taxExclusiveTotal.toFixed(2)} | VAT: ${totals.vatTotal.toFixed(2)} | Grand: ${totals.taxInclusiveTotal.toFixed(2)}`
-    );
-
     return xml;
   }
 }

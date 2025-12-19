@@ -51,7 +51,7 @@ export class InvoiceService {
     }
 
     // 2. Generate Base XML
-    const baseXml = this.xmlTemplate.generateSimplifiedInvoiceXml(dto);
+    const baseXml = this.xmlTemplate.generateInvoiceXml(dto);
 
     console.log("\n[PRE-SIGN] 📄 Generated Base XML Structure:");
     console.log("--------------------------------------------------");

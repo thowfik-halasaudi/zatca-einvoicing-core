@@ -79,6 +79,18 @@ export class InvoiceMetaDto {
   @IsString()
   @IsOptional()
   deliveryDate?: string;
+
+  @IsString()
+  @IsOptional()
+  invoiceTypeCode?: string = "388"; // 388=Invoice, 381=Credit, 383=Debit
+
+  @IsString()
+  @IsOptional()
+  invoiceTypeCodeName?: string = "0211010"; // e.g., 0100000 (Standard), 0200000 (Simplified)
+
+  @IsString()
+  @IsOptional()
+  billingReferenceId?: string; // Original Invoice ID for Credit/Debit Notes
 }
 
 export class AddressDto {
@@ -125,7 +137,7 @@ export class SupplierDto {
 export class CustomerDto {
   @IsString()
   @IsOptional()
-  type?: string;
+  type?: string; // 'B2B' or 'B2C'
 
   @IsString()
   @IsOptional()
@@ -133,7 +145,15 @@ export class CustomerDto {
 
   @IsString()
   @IsOptional()
+  registrationName?: string; // Business name for B2B
+
+  @IsString()
+  @IsOptional()
   vatNumber?: string;
+
+  @IsString()
+  @IsOptional()
+  crNumber?: string;
 
   @IsObject()
   @IsOptional()
