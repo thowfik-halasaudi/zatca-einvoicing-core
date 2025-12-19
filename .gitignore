@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+dist/
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# ZATCA Sensitive Data (CRITICAL: Never commit these!)
+onboarding_data/
+*.pem
+*.csr
+*.txt
+onboarding-config.properties
+
+# Temporary Invoice Data
+tmp/
+
+# OS Specific
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+*.log
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
