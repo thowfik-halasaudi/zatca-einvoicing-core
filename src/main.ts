@@ -8,6 +8,13 @@ async function bootstrap() {
 
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
 
+  // Enable CORS for frontend at http://localhost:3001
+  app.enableCors({
+    origin: ["http://localhost:3001", "http://localhost:3000"],
+    methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
+    credentials: true,
+  });
+
   const config = new DocumentBuilder()
     .setTitle("ZATCA E-Invoicing Core")
     .setDescription("Microservice for ZATCA Phase-2 Compliance")

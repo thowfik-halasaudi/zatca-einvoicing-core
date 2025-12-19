@@ -106,45 +106,68 @@ export class CryptoCliService {
 
       console.log(`🔹 Step 3: Reading generated files...`);
 
-      // Read the private key (it respects the filename)
-      const privateKeyPath = this.fileManager.getOnboardingFilePath(
-        commonName.toLowerCase(),
-        privateKeyName
-      );
+      // List files for diagnostics
+      const filesAfter = await fs.readdir(onboardingDir);
+      console.log(`📂 Files in folder: ${filesAfter.join(", ")}`);
 
+      // Read the private key
+      const privateKeyPath = path.join(onboardingDir, privateKeyName);
+      console.log(`🔍 Checking private key at: ${privateKeyPath}`);
       if (!(await this.fileManager.exists(privateKeyPath))) {
-        throw new Error(`Private key file was not created: ${privateKeyPath}`);
-      }
-      const privateKey = await this.fileManager.readFile(privateKeyPath);
-
-      // Find the CSR file (it ignores the filename and uses generated-csr-<timestamp>.csr)
-      const dirContents = await fs.readdir(onboardingDir);
-      const generatedCsrFile = dirContents.find(
-        (f) => f.startsWith("generated-csr-") && f.endsWith(".csr")
-      );
-
-      if (!generatedCsrFile) {
         throw new Error(
-          `Could not find generated CSR file in ${onboardingDir}`
+          `Private key file was not created: ${privateKeyPath}. Available: ${filesAfter.join(", ")}`
+        );
+      }
+      let privateKey = await this.fileManager.readFile(privateKeyPath);
+
+      // ALIGNMENT: If the user wants it like hiltongroup, we might need the raw key content without headers
+      // Usually, ZATCA expects the EC private key. hiltongroup had: MIGNAgEAMBAG...
+      // egs-signing-key.pem from CLI has: -----BEGIN EC PRIVATE KEY----- ...
+      if (privateKey.includes("-----BEGIN")) {
+        console.log(
+          "✂️ Stripping PEM headers from Private Key to match hiltongroup format..."
+        );
+        privateKey = privateKey
+          .replace(/-----BEGIN[^-]+-----/g, "")
+          .replace(/-----END[^-]+-----/g, "")
+          .replace(/\s+/g, "")
+          .trim();
+        // Overwrite the file with the raw version to match hiltongroup exactly
+        await fs.writeFile(privateKeyPath, privateKey, "utf-8");
+      }
+
+      // Read the CSR file
+      const csrPath = path.join(onboardingDir, csrName);
+      console.log(`🔍 Checking CSR at: ${csrPath}`);
+      if (!(await this.fileManager.exists(csrPath))) {
+        throw new Error(
+          `CSR file was not created: ${csrPath}. Available: ${filesAfter.join(", ")}`
         );
       }
 
-      const csrPathOriginal = path.join(onboardingDir, generatedCsrFile);
-      const csrPathTarget = path.join(onboardingDir, csrName);
+      let csr = await this.fileManager.readFile(csrPath);
 
-      console.log(
-        `🔍 Found generated CSR file: ${generatedCsrFile}. Renaming to ${csrName}...`
-      );
-      await fs.rename(csrPathOriginal, csrPathTarget);
+      // ALIGNMENT: hiltongroup had a Base64-only file.
+      // The CLI output is usually PEM. If we see PEM headers, we convert to Base64 (single line).
+      if (csr.includes("-----BEGIN")) {
+        console.log(
+          "🔄 Converting PEM CSR to Base64 to match hiltongroup format..."
+        );
+        csr = csr
+          .replace(/-----BEGIN[^-]+-----/g, "")
+          .replace(/-----END[^-]+-----/g, "")
+          .replace(/\s+/g, "")
+          .trim();
+        // Overwrite the file with the Base64 version to match hiltongroup exactly
+        await fs.writeFile(csrPath, csr, "utf-8");
+      }
 
-      const csr = await this.fileManager.readFile(csrPathTarget);
-
-      console.log(`✅ Step 3: Files read successfully from disk.`);
+      console.log(`✅ Step 3: Files read and aligned successfully.`);
       console.log("--------------------------------------------------");
 
       return {
-        privateKey: privateKey.trim(),
-        csr: csr.trim(),
+        privateKey: privateKey,
+        csr: csr,
       };
     } catch (error) {
       console.log(`❌ Error during CSR generation: ${error.message}`);
