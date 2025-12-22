@@ -289,4 +289,30 @@ export class ComplianceService {
       message: `Compliance check completed for ${invoiceSerialNumber}. Results saved to disk.`,
     };
   }
+  /**
+   * List all onboarded EGS units (hotels) with detailed info from properties
+   */
+  async listOnboardedEgs() {
+    this.logger.log("Listing all onboarded EGS units with extended data...");
+    const dirs = await this.fileManager.listOnboardingDirectories();
+    const egsList = [];
+
+    for (const dir of dirs) {
+      const config = await this.fileManager.readOnboardingConfig(dir);
+      if (config["csr.common.name"]) {
+        egsList.push({
+          slug: config["csr.common.name"],
+          organizationName:
+            config["csr.organization.name"] ||
+            dir
+              .split("_")
+              .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+              .join(" "),
+          vatNumber: config["csr.organization.identifier"] || "",
+        });
+      }
+    }
+
+    return egsList;
+  }
 }

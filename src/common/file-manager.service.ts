@@ -188,4 +188,53 @@ export class FileManagerService implements OnModuleInit {
     await fs.writeFile(filePath, content, "utf-8");
     return filePath;
   }
+  /**
+   * List all directories in the onboarding_data folder
+   */
+  async listOnboardingDirectories(): Promise<string[]> {
+    try {
+      const items = await fs.readdir(this.onboardingDir);
+      const dirs: string[] = [];
+      for (const item of items) {
+        const fullPath = path.join(this.onboardingDir, item);
+        const stats = await fs.stat(fullPath);
+        if (stats.isDirectory()) {
+          dirs.push(item);
+        }
+      }
+      return dirs;
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to list onboarding directories: ${error.message}`
+      );
+      return [];
+    }
+  }
+  /**
+   * Read and parse properties file from onboarding directory
+   */
+  async readOnboardingConfig(dirName: string): Promise<Record<string, string>> {
+    const filePath = path.join(
+      this.onboardingDir,
+      dirName,
+      "onboarding-config.properties"
+    );
+    try {
+      if (!(await this.exists(filePath))) return {};
+      const content = await this.readFile(filePath);
+      const config: Record<string, string> = {};
+      content.split("\n").forEach((line) => {
+        const [key, ...values] = line.split("=");
+        if (key && values.length > 0) {
+          config[key.trim()] = values.join("=").trim();
+        }
+      });
+      return config;
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to read config for ${dirName}: ${error.message}`
+      );
+      return {};
+    }
+  }
 }

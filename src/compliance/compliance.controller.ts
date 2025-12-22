@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import { Body, Controller, Get, Post } from "@nestjs/common";
 import { ComplianceService } from "./compliance.service";
 import { ApiTags, ApiOperation, ApiResponse } from "@nestjs/swagger";
 import { OnboardEgsDto } from "./dto/onboard-egs.dto";
@@ -14,6 +14,19 @@ import { CheckComplianceDto } from "./dto/check-compliance.dto";
 @Controller("compliance")
 export class ComplianceController {
   constructor(private readonly complianceService: ComplianceService) {}
+
+  /**
+   * List all onboarded EGS units (hotels)
+   */
+  @Get("egs")
+  @ApiOperation({ summary: "List all onboarded EGS units" })
+  @ApiResponse({
+    status: 200,
+    description: "List of EGS units retrieved successfully",
+  })
+  async listEgs() {
+    return this.complianceService.listOnboardedEgs();
+  }
 
   /**
    * Step 1 + 2: Full Onboard (Generate Keys & CSR then issue CSID)
