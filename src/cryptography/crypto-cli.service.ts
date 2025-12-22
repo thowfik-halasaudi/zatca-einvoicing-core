@@ -147,20 +147,24 @@ export class CryptoCliService {
 
       let csr = await this.fileManager.readFile(csrPath);
 
-      // ALIGNMENT: hiltongroup had a Base64-only file.
-      // The CLI output is usually PEM. If we see PEM headers, we convert to Base64 (single line).
-      if (csr.includes("-----BEGIN")) {
-        console.log(
-          "🔄 Converting PEM CSR to Base64 to match hiltongroup format..."
-        );
-        csr = csr
-          .replace(/-----BEGIN[^-]+-----/g, "")
-          .replace(/-----END[^-]+-----/g, "")
-          .replace(/\s+/g, "")
-          .trim();
-        // Overwrite the file with the Base64 version to match hiltongroup exactly
-        await fs.writeFile(csrPath, csr, "utf-8");
-      }
+      // ENCODING FIX:
+      // The Fatoora CLI output is a raw PEM file (starts with -----BEGIN...).
+      // However, the ZATCA API Step 2 wants the CSR field to be a Base64 string of that PEM content.
+      // So we read the PEM, encode it to Base64 (starts with LS0tLS...), and save that as the final .csr file.
+      // This matches the working 'hiltongroup' example.
+
+      const pemContent = csr; // 'csr' currently holds the raw PEM string
+      const base64Csr = Buffer.from(pemContent).toString("base64");
+
+      // Save the Base64 version
+      await fs.writeFile(csrPath, base64Csr, "utf-8");
+
+      // Update return value
+      csr = base64Csr;
+
+      console.log(
+        `✅ Step 3: Converted PEM to Base64-PEM (starts with ${base64Csr.substring(0, 10)}...)`
+      );
 
       console.log(`✅ Step 3: Files read and aligned successfully.`);
       console.log("--------------------------------------------------");
