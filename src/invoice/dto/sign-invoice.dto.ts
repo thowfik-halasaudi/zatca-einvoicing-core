@@ -120,6 +120,48 @@ export class AddressDto {
   country?: string = "SA";
 }
 
+export class AllowanceChargeDto {
+  @IsBoolean()
+  chargeIndicator: boolean; // true for Charge, false for Allowance (Discount)
+
+  @IsString()
+  @IsOptional()
+  reasonCode?: string;
+
+  @IsString()
+  @IsOptional()
+  reason?: string;
+
+  @IsNumber()
+  amount: number;
+
+  @IsNumber()
+  @IsOptional()
+  vatPercent?: number = 15;
+
+  @IsString()
+  @IsOptional()
+  taxCategory?: string = "S";
+}
+
+export class DocumentReferenceDto {
+  @IsString()
+  id: string;
+
+  @IsString()
+  uuid: string;
+
+  @IsString()
+  issueDate: string;
+
+  @IsString()
+  issueTime: string;
+
+  @IsString()
+  @IsOptional()
+  documentTypeCode?: string = "386";
+}
+
 export class SupplierDto {
   @IsString()
   @IsNotEmpty()
@@ -198,6 +240,20 @@ export class InvoiceLineItemDto {
   @IsString()
   @IsOptional()
   taxCategory?: string = "S";
+
+  @IsString()
+  @IsOptional()
+  taxExemptionReasonCode?: string;
+
+  @IsString()
+  @IsOptional()
+  taxExemptionReason?: string;
+
+  @IsObject()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DocumentReferenceDto)
+  documentReference?: DocumentReferenceDto;
 }
 
 export class TotalsDto {
@@ -208,10 +264,31 @@ export class TotalsDto {
   taxExclusiveTotal: number;
 
   @IsNumber()
+  @IsOptional()
   vatTotal: number;
 
   @IsNumber()
+  @IsOptional()
+  taxCurrencyVatTotal?: number;
+
+  @IsNumber()
   taxInclusiveTotal: number;
+
+  @IsNumber()
+  @IsOptional()
+  allowanceTotalAmount?: number = 0;
+
+  @IsNumber()
+  @IsOptional()
+  chargeTotalAmount?: number = 0;
+
+  @IsNumber()
+  @IsOptional()
+  prepaidAmount?: number = 0;
+
+  @IsNumber()
+  @IsOptional()
+  payableRoundingAmount?: number = 0;
 
   @IsNumber()
   payableAmount: number;
@@ -243,6 +320,12 @@ export class SignInvoiceDto {
   @ValidateNested({ each: true })
   @Type(() => InvoiceLineItemDto)
   lineItems: InvoiceLineItemDto[];
+
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => AllowanceChargeDto)
+  allowanceCharges?: AllowanceChargeDto[];
 
   @IsObject()
   @ValidateNested()

@@ -10,6 +10,13 @@ export interface ComplianceCertificateResponse {
   errors?: any[];
 }
 
+/**
+ * ZatcaClientService
+ *
+ * This service is the low-level API client that communicates directly with ZATCA's external Gateway.
+ * It handles raw HTTP requests, Basic Authentication (Base64 encoding of tokens),
+ * header management (Accept-Version, OTP), and unified error parsing for all ZATCA endpoints.
+ */
 @Injectable()
 export class ZatcaClientService {
   private readonly logger = new Logger(ZatcaClientService.name);
@@ -23,10 +30,11 @@ export class ZatcaClientService {
   constructor(private readonly httpService: HttpService) {}
 
   /**
-   * Request a Compliance Certificate (Step 2)
+   * issueComplianceCertificate
    *
-   * As per ZATCA Developer Portal API:
-   * POST /compliance
+   * Corresponds to ZATCA Step 2: "Compliance CSID".
+   * Takes a CSR and an OTP (from Fatoora Portal) and returns the Binary Security Token
+   * and Secret needed for all subsequent authenticated API calls.
    */
   async issueComplianceCertificate(
     csr: string,
@@ -109,10 +117,11 @@ export class ZatcaClientService {
   }
 
   /**
-   * Check Invoice Compliance (Step 4)
+   * checkCompliance
    *
-   * As per ZATCA Developer Portal API:
-   * POST /compliance/invoices
+   * Corresponds to ZATCA Step 4: "Compliance Check".
+   * This is a "dry-run" submission used during development/onboarding to verify
+   * that your signed XML, QR code, and business logic are 100% compliant with ZATCA rules.
    */
   async checkCompliance(
     invoiceHash: string,
@@ -132,21 +141,8 @@ export class ZatcaClientService {
       .replace(/[\r\n\s]/g, "");
 
     // Construct the Auth Header
-    // ZATCA expects: Basic base64(binarySecurityToken + ":" + secret)
-    // Since strippedCert (the binarySecurityToken) is already base64, we use it as-is.
     const authString = `${strippedCert}:${secret}`;
     const authHeader = `Basic ${Buffer.from(authString).toString("base64")}`;
-
-    console.log("--------------------------------------------------");
-    console.log("🛡️ [ZATCA CLIENT] PREPARING AUTH");
-    console.log(
-      `🔐 Token (Username) prefix: ${strippedCert.substring(0, 15)}...`
-    );
-    console.log(`� Secret (Password) prefix: ${secret.substring(0, 5)}...`);
-    console.log(
-      `📡 Final Auth Header prefix: ${authHeader.substring(0, 25)}...`
-    );
-    console.log("--------------------------------------------------");
 
     const headers = {
       "Accept-Version": this.apiVersion,
@@ -165,7 +161,6 @@ export class ZatcaClientService {
     console.log("🚀 SENDING COMPLIANCE CHECK TO ZATCA");
     console.log(`📡 URL: ${url}`);
     console.log(`🆔 UUID: ${uuid}`);
-    console.log(`#️⃣ Hash: ${invoiceHash}`);
     console.log("--------------------------------------------------");
 
     try {
@@ -185,11 +180,9 @@ export class ZatcaClientService {
 
       let errorMsg = "Compliance Check Failed";
 
-      // If ZATCA returned a validation report with errors, show the first one
       if (errorData?.validationResults?.errorMessages?.length > 0) {
         const firstErr = errorData.validationResults.errorMessages[0];
         errorMsg = `${firstErr.message} (${firstErr.code})`;
-        console.log(`🚫 ZATCA Validation Error: ${errorMsg}`);
       } else if (errorData?.errors && Array.isArray(errorData.errors)) {
         errorMsg = errorData.errors
           .map((e: any) => `${e.message} (${e.code})`)
@@ -199,6 +192,141 @@ export class ZatcaClientService {
       }
 
       throw new BadRequestException(`ZATCA Compliance Check: ${errorMsg}`);
+    }
+  }
+
+  /**
+   * clearInvoice
+   *
+   * Corresponds to ZATCA Phase 2: "Clearance".
+   * Used for Standard (B2B) invoices. This is a real-time call; the invoice is
+   * not legally valid until ZATCA clears it and returns it with their own digital signature.
+   */
+  async clearInvoice(
+    invoiceHash: string,
+    uuid: string,
+    signedXmlBase64: string,
+    certificate: string,
+    secret: string,
+    production: boolean = false
+  ): Promise<any> {
+    const baseUrl = production
+      ? this.productionUrl
+      : "https://gw-fatoora.zatca.gov.sa/e-invoicing/simulation";
+    const url = `${baseUrl}/invoices/clearance/single`;
+    return this.validateInvoice(
+      url,
+      "CLEARANCE",
+      invoiceHash,
+      uuid,
+      signedXmlBase64,
+      certificate,
+      secret
+    );
+  }
+
+  /**
+   * reportInvoice
+   *
+   * Corresponds to ZATCA Phase 2: "Reporting".
+   * Used for Simplified (B2C) invoices. Can be called immediately or in batches
+   * within 24 hours of issuance. It registers the sale with ZATCA for tax tracking.
+   */
+  async reportInvoice(
+    invoiceHash: string,
+    uuid: string,
+    signedXmlBase64: string,
+    certificate: string,
+    secret: string,
+    production: boolean = false
+  ): Promise<any> {
+    const baseUrl = production
+      ? this.productionUrl
+      : "https://gw-fatoora.zatca.gov.sa/e-invoicing/simulation";
+    const url = `${baseUrl}/invoices/reporting/single`;
+    return this.validateInvoice(
+      url,
+      "REPORTING",
+      invoiceHash,
+      uuid,
+      signedXmlBase64,
+      certificate,
+      secret
+    );
+  }
+
+  /**
+   * validateInvoice
+   *
+   * A private internal helper that wraps the boiler-plate for Clearance and Reporting.
+   * Both APIs share the same payload structure and Basic Auth requirements.
+   */
+  private async validateInvoice(
+    url: string,
+    type: "CLEARANCE" | "REPORTING",
+    invoiceHash: string,
+    uuid: string,
+    signedXmlBase64: string,
+    certificate: string,
+    secret: string
+  ): Promise<any> {
+    this.logger.debug(`Submiting to ZATCA ${type}: ${url}`);
+
+    const strippedCert = certificate
+      .replace(/-----(BEGIN|END) CERTIFICATE-----/gi, "")
+      .replace(/[\r\n\s]/g, "");
+
+    const authString = `${strippedCert}:${secret}`;
+    const authHeader = `Basic ${Buffer.from(authString).toString("base64")}`;
+
+    const headers = {
+      "Accept-Version": this.apiVersion,
+      "Accept-Language": "en",
+      "Content-Type": "application/json",
+      Authorization: authHeader,
+    };
+
+    const payload = {
+      invoiceHash,
+      uuid,
+      invoice: signedXmlBase64,
+    };
+
+    console.log("--------------------------------------------------");
+    console.log(`🚀 [ZATCA] ${type} SUBMISSION`);
+    console.log(`📡 URL: ${url}`);
+    console.log(`🆔 UUID: ${uuid}`);
+    console.log("--------------------------------------------------");
+
+    try {
+      const response = await lastValueFrom(
+        this.httpService.post(url, payload, { headers })
+      );
+
+      console.log(`✅ [ZATCA] ${type} Success.`);
+      return response.data;
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      const errorData: any = axiosError.response?.data;
+
+      console.log(`❌ [ZATCA] ${type} Failed!`);
+      console.log(`Status: ${axiosError.response?.status}`);
+      console.log(`Body: ${JSON.stringify(errorData, null, 2)}`);
+
+      let errorMsg = `${type} Submission Failed`;
+
+      if (errorData?.validationResults?.errorMessages?.length > 0) {
+        const firstErr = errorData.validationResults.errorMessages[0];
+        errorMsg = `${firstErr.message} (${firstErr.code})`;
+      } else if (errorData?.errors && Array.isArray(errorData.errors)) {
+        errorMsg = errorData.errors
+          .map((e: any) => `${e.message} (${e.code})`)
+          .join(", ");
+      } else if (errorData?.message) {
+        errorMsg = errorData.message;
+      }
+
+      throw new BadRequestException(`ZATCA ${type}: ${errorMsg}`);
     }
   }
 }

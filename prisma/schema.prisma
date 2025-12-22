@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model InvoiceCounter {
+  id          Int      @id @default(autoincrement())
+  seriesKey   String   @unique @default("INV")
+  lastNumber  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Invoice {
+  id                    String    @id @default(uuid())
+  invoiceNumber        String    @unique
+  uuid                 String    @unique @default(uuid())
+  invoiceTypeCode      String    // 380, 381, 383, 386, 388
+  invoiceCategory      String    // STANDARD, SIMPLIFIED
+  issueDateTime        DateTime
+  
+  // Seller
+  sellerName           String
+  sellerVatNumber      String
+  sellerAddress        String
+  
+  // Buyer
+  buyerName            String?
+  buyerVatNumber       String?
+  buyerAddress         String?
+  
+  // References
+  referenceInvoiceNumber String?
+  referenceUUID         String?
+  referenceIssueDate    DateTime?
+  
+  // Advance
+  prepaidAmount        Float?    @default(0)
+  remainingAmount      Float?    @default(0)
+  
+  // Totals
+  subTotal             Float
+  vatAmount            Float
+  totalAmount          Float
+  currency             String    @default("SAR")
+  
+  signedXml            String?  @db.Text
+
+  status               String    @default("ISSUED") // ISSUED, CREDITED, DEBITED
+  
+  // Relations
+  items                InvoiceItem[]
+  hash                 InvoiceHash?
+  submission           ZatcaSubmission?
+  
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([invoiceNumber])
+  @@index([uuid])
+}
+
+model InvoiceItem {
+  id            String  @id @default(uuid())
+  invoiceId     String
+  invoice       Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  description   String
+  quantity      Float
+  unitPrice     Float
+  vatRate       Float
+  vatAmount     Float
+  totalAmount   Float
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model InvoiceHash {
+  id                  String  @id @default(uuid())
+  invoiceId           String  @unique
+  invoice             Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  previousInvoiceHash String?
+  currentInvoiceHash  String
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model ZatcaSubmission {
+  id              String   @id @default(uuid())
+  invoiceId       String   @unique
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  submissionType  String   // CLEARANCE, REPORTING
+  zatcaStatus     String   @default("PENDING") // PENDING, CLEARED, REPORTED, REJECTED
+  attemptCount    Int      @default(0)
+  lastAttemptAt   DateTime?
+  qrCode          String?  @db.Text
+  zatcaResponse   Json?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}

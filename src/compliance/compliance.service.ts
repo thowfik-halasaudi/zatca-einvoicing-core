@@ -8,13 +8,19 @@ import { CryptoCliService } from "../cryptography/crypto-cli.service";
 import { OnboardEgsDto } from "./dto/onboard-egs.dto";
 import { IssueCsidDto } from "./dto/issue-csid.dto";
 import { CheckComplianceDto } from "./dto/check-compliance.dto";
+import { SubmitZatcaDto } from "./dto/submit-zatca.dto";
 import { ZatcaClientService } from "../zatca/zatca-client.service";
 import { FileManagerService } from "../common/file-manager.service";
 
 /**
- * Compliance Service
+ * ComplianceService
  *
- * Orchestrates CSR generation using Fatoora SDK CLI
+ * The "Brain" of the ZATCA integration.
+ * This service orchestrates the high-level business flows:
+ * 1. Generating Onboarding Data (Keys/CSR) via Fatoora SDK CLI.
+ * 2. Communicating with ZATCA APIs for certificates and submissions.
+ * 3. Managing the local storage of certificates and signed XMLs.
+ * 4. Detecting invoice types (Standard B2B vs Simplified B2C) to route to the correct ZATCA endpoint.
  */
 @Injectable()
 export class ComplianceService {
@@ -27,10 +33,11 @@ export class ComplianceService {
   ) {}
 
   /**
-   * Onboard EGS Unit - Generate Keys & CSR using Fatoora CLI
-   */
-  /**
-   * Step 1: Onboard EGS Unit - Generate Keys & CSR locally
+   * onboardEgs
+   *
+   * Triggers the Step 1 of Onboarding: Local Key and CSR Generation.
+   * It uses the CryptoCliService to talk to the Fatoora Java SDK.
+   * The generated files are saved in the `onboarding_data/` folder.
    */
   async onboardEgs(dto: OnboardEgsDto) {
     console.log("==================================================");
@@ -66,7 +73,11 @@ export class ComplianceService {
   }
 
   /**
-   * Step 2: Issue CSID using an existing CSR file from disk
+   * issueCsid
+   *
+   * Triggers Step 2 of Onboarding: Requesting the Certificate.
+   * It reads the CSR generated in Step 1 from disk and sends it along with the OTP
+   * to ZATCA. The resulting CSID is what allows the system to sign and report invoices.
    */
   async issueCsid(dto: IssueCsidDto) {
     console.log("\n[STEP 2 ONLY] 🚀 STARTING INDEPENDENT CSID ISSUANCE...");
@@ -102,7 +113,10 @@ export class ComplianceService {
   }
 
   /**
-   * Common logic to call ZATCA API and save results
+   * finishOnboarding
+   *
+   * A private utility that finalizes the onboarding by calling the ZATCA client
+   * and ensuring that the issued Certificate and Secret are securely saved for later use.
    */
   private async finishOnboarding(
     commonName: string,
@@ -158,7 +172,10 @@ export class ComplianceService {
   }
 
   /**
-   * Step 4: Check Invoice Compliance
+   * checkInvoiceCompliance
+   *
+   * Corresponds to Step 4. It loads a signed XML from disk, extracts its hash/UUID,
+   * and sends it to ZATCA's Compliance Check API to ensure it passes all validation rules.
    */
   async checkInvoiceCompliance(dto: CheckComplianceDto) {
     const { commonName, invoiceSerialNumber } = dto;
@@ -215,43 +232,7 @@ export class ComplianceService {
 
     const signedXml = await this.fileManager.readFile(signedPath);
 
-    // 3. Extract UUID and Hash from XML using more specific Regex
-    console.log("🔍 [EXTRACTION] Parsing signed XML for UUID and Hash...");
-
-    // Main UUID is usually near the top, after cbc:ID
-    const uuidMatch = signedXml.match(/<cbc:UUID>([a-f0-9-]{36})<\/cbc:UUID>/i);
-
-    // The Invoice Hash is the DigestValue inside the ds:Reference that has an empty URI (URI="")
-    const referenceMatch = signedXml.match(
-      /<ds:Reference [^>]*?URI=""[^>]*?>[\s\S]*?<ds:DigestValue>([^<]+)<\/ds:DigestValue>/
-    );
-    let invoiceHash = "";
-
-    if (referenceMatch) {
-      invoiceHash = referenceMatch[1].trim();
-      console.log(
-        '✅ [EXTRACTION] Found Invoice Hash in <ds:Reference URI="">'
-      );
-    } else {
-      console.log(
-        "⚠️ [EXTRACTION] Primary Reference not found. Trying fallback..."
-      );
-      const fallback = signedXml.match(
-        /<ds:DigestValue>([^<]{44})<\/ds:DigestValue>/
-      );
-      if (fallback) invoiceHash = fallback[1];
-    }
-
-    if (!uuidMatch || !invoiceHash) {
-      console.log("❌ Extraction Failed:");
-      console.log(`- UUID Match: ${uuidMatch ? "Yes" : "No"}`);
-      console.log(`- Hash Found: ${invoiceHash ? "Yes" : "No"}`);
-      throw new BadRequestException(
-        "Could not extract a valid 36-char UUID or SHA-256 Hash from the signed XML document."
-      );
-    }
-
-    const uuid = uuidMatch[1];
+    const { uuid, invoiceHash } = this.extractInvoiceMetadata(signedXml);
 
     console.log("--------------------------------------------------");
     console.log("🔍 [STEP 4.3] EXTRACTION RESULTS");
@@ -287,6 +268,150 @@ export class ComplianceService {
       ...result,
       reportPath,
       message: `Compliance check completed for ${invoiceSerialNumber}. Results saved to disk.`,
+    };
+  }
+
+  /**
+   * submitToZatca
+   *
+   * The final Step 5: Production/Simulation Submission.
+   * This is the "Smart Router". It reads the signed XML, detects if it's a B2B
+   * (Standard) or B2C (Simplified) invoice, and automatically calls either
+   * 'Clearance' or 'Reporting' endpoints as required by Saudi law.
+   */
+  async submitToZatca(dto: SubmitZatcaDto) {
+    const { commonName, invoiceSerialNumber, production } = dto;
+    const isProduction = !!production;
+
+    console.log("\n[SUBMISSION] 🚀 STARTING ZATCA SUBMISSION...");
+    console.log(`👤 Profile: ${commonName}`);
+    console.log(`🔢 Serial: ${invoiceSerialNumber}`);
+
+    // 1. Load Security Tokens
+    const certPath = this.fileManager.getOnboardingFilePath(
+      commonName,
+      "ccsid-certificate.pem"
+    );
+    const secretPath = this.fileManager.getOnboardingFilePath(
+      commonName,
+      "ccsid-secret.txt"
+    );
+
+    if (
+      !(await this.fileManager.exists(certPath)) ||
+      !(await this.fileManager.exists(secretPath))
+    ) {
+      throw new NotFoundException(
+        `Security tokens not found for ${commonName}.`
+      );
+    }
+
+    const certificate = (await this.fileManager.readFile(certPath)).trim();
+    const secret = (await this.fileManager.readFile(secretPath)).trim();
+
+    // 2. Load Signed XML
+    const tempDir = await this.fileManager.getTempDir(commonName);
+    const cleanSerialNumber = invoiceSerialNumber.replace(/_signed$/i, "");
+    const signedPath = require("path").join(
+      tempDir,
+      `${cleanSerialNumber}_signed.xml`
+    );
+
+    if (!(await this.fileManager.exists(signedPath))) {
+      throw new NotFoundException(
+        `Signed XML not found for ${cleanSerialNumber}.`
+      );
+    }
+
+    const signedXml = await this.fileManager.readFile(signedPath);
+    const signedXmlBase64 = Buffer.from(signedXml).toString("base64");
+
+    // 3. Extract Metadata & Strategy (Clearance vs Reporting)
+    const { uuid, invoiceHash, typeCode } =
+      this.extractInvoiceMetadata(signedXml);
+
+    // ZATCA Rule: 01xxxx is Standard (Clearance), 02xxxx is Simplified (Reporting)
+    const isStandard = typeCode.startsWith("01");
+    const submissionType = isStandard ? "CLEARANCE" : "REPORTING";
+
+    console.log(
+      `📍 Detected Type: ${isStandard ? "STANDARD (B2B)" : "SIMPLIFIED (B2C)"}`
+    );
+    console.log(`🛰️ Routing to ${submissionType} endpoint...`);
+
+    // 4. API Execution
+    let result;
+    if (isStandard) {
+      result = await this.zatcaClient.clearInvoice(
+        invoiceHash,
+        uuid,
+        signedXmlBase64,
+        certificate,
+        secret,
+        isProduction
+      );
+    } else {
+      result = await this.zatcaClient.reportInvoice(
+        invoiceHash,
+        uuid,
+        signedXmlBase64,
+        certificate,
+        secret,
+        isProduction
+      );
+    }
+
+    // 5. Save Evidence
+    const resultPath = await this.fileManager.writeTempFile(
+      commonName,
+      `${invoiceSerialNumber}_zatca_result.json`,
+      JSON.stringify(result, null, 2)
+    );
+
+    return {
+      ...result,
+      submissionType,
+      resultPath,
+      message: `Invoice successfully ${isStandard ? "cleared" : "reported"} by ZATCA.`,
+    };
+  }
+
+  /**
+   * extractInvoiceMetadata
+   *
+   * A helper that uses Regex to pull critical ZATCA fields (UUID, Hash, InvoiceTypeCode)
+   * from the UBL XML. This avoids the overhead of a full XML parser for simple flags.
+   */
+  private extractInvoiceMetadata(xml: string) {
+    const uuidMatch = xml.match(/<cbc:UUID>([a-f0-9-]{36})<\/cbc:UUID>/i);
+    const typeCodeMatch = xml.match(
+      /<cbc:InvoiceTypeCode[^>]*?name="([^"]+)"/i
+    );
+
+    const referenceMatch = xml.match(
+      /<ds:Reference [^>]*?URI=""[^>]*?>[\s\S]*?<ds:DigestValue>([^<]+)<\/ds:DigestValue>/
+    );
+
+    let invoiceHash = "";
+    if (referenceMatch) {
+      invoiceHash = referenceMatch[1].trim();
+    } else {
+      const fallback = xml.match(
+        /<ds:DigestValue>([^<]{44})<\/ds:DigestValue>/
+      );
+      if (fallback) invoiceHash = fallback[1];
+    }
+
+    if (!uuidMatch || !invoiceHash || !typeCodeMatch) {
+      throw new BadRequestException(
+        "Could not extract UUID, Hash, or TypeCode from XML."
+      );
+    }
+
+    return {
+      uuid: uuidMatch[1],
+      invoiceHash: invoiceHash,
+      typeCode: typeCodeMatch[1],
     };
   }
   /**

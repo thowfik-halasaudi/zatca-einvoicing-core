@@ -38,11 +38,22 @@ export class XmlTemplateService {
 
     const lineItemsXml = lineItems
       .map((item, index) => {
+        const docRefXml = item.documentReference
+          ? `
+        <cac:DocumentReference>
+            <cbc:ID>${item.documentReference.id}</cbc:ID>
+            <cbc:UUID>${item.documentReference.uuid}</cbc:UUID>
+            <cbc:IssueDate>${item.documentReference.issueDate}</cbc:IssueDate>
+            <cbc:IssueTime>${item.documentReference.issueTime}</cbc:IssueTime>
+            <cbc:DocumentTypeCode>${item.documentReference.documentTypeCode || "386"}</cbc:DocumentTypeCode>
+        </cac:DocumentReference>`
+          : "";
+
         return `
     <cac:InvoiceLine>
         <cbc:ID>${item.lineId}</cbc:ID>
         <cbc:InvoicedQuantity unitCode="${item.unitCode || "PCE"}">${item.quantity}</cbc:InvoicedQuantity>
-        <cbc:LineExtensionAmount currencyID="${invoice.currency || "SAR"}">${item.taxExclusiveAmount.toFixed(2)}</cbc:LineExtensionAmount>
+        <cbc:LineExtensionAmount currencyID="${invoice.currency || "SAR"}">${item.taxExclusiveAmount.toFixed(2)}</cbc:LineExtensionAmount>${docRefXml}
         <cac:TaxTotal>
             <cbc:TaxAmount currencyID="${invoice.currency || "SAR"}">${item.vatAmount.toFixed(2)}</cbc:TaxAmount>
             <cbc:RoundingAmount currencyID="${invoice.currency || "SAR"}">${(item.taxExclusiveAmount + item.vatAmount).toFixed(2)}</cbc:RoundingAmount>
@@ -75,12 +86,99 @@ export class XmlTemplateService {
     </cac:BillingReference>`
         : "";
 
+    // --- Dynamic Tax Subtotals Calculation ---
+    // Group line items by TaxCategory and Percent to generate <cac:TaxSubtotal> blocks
+    const taxSubtotalsMap = new Map<
+      string,
+      {
+        taxableAmount: number;
+        taxAmount: number;
+        percent: number;
+        category: string;
+        reasonCode?: string;
+        reason?: string;
+      }
+    >();
+
+    lineItems.forEach((item) => {
+      const cat = item.taxCategory || (item.vatPercent > 0 ? "S" : "O");
+      const key = `${cat}_${item.vatPercent}`;
+
+      if (!taxSubtotalsMap.has(key)) {
+        taxSubtotalsMap.set(key, {
+          taxableAmount: 0,
+          taxAmount: 0,
+          percent: item.vatPercent,
+          category: cat,
+          reasonCode: item.taxExemptionReasonCode,
+          reason: item.taxExemptionReason,
+        });
+      }
+
+      const sub = taxSubtotalsMap.get(key)!;
+      sub.taxableAmount += item.taxExclusiveAmount;
+      sub.taxAmount += item.vatAmount;
+    });
+
+    const taxSubtotalsXml = Array.from(taxSubtotalsMap.values())
+      .map((sub) => {
+        return `
+        <cac:TaxSubtotal>
+            <cbc:TaxableAmount currencyID="${invoice.currency || "SAR"}">${sub.taxableAmount.toFixed(2)}</cbc:TaxableAmount>
+            <cbc:TaxAmount currencyID="${invoice.currency || "SAR"}">${sub.taxAmount.toFixed(2)}</cbc:TaxAmount>
+            <cac:TaxCategory>
+                <cbc:ID schemeAgencyID="6" schemeID="UN/ECE 5305">${sub.category}</cbc:ID>
+                <cbc:Percent>${sub.percent.toFixed(2)}</cbc:Percent>
+                ${sub.reasonCode ? `<cbc:TaxExemptionReasonCode>${sub.reasonCode}</cbc:TaxExemptionReasonCode>` : ""}
+                ${sub.reason ? `<cbc:TaxExemptionReason>${sub.reason}</cbc:TaxExemptionReason>` : ""}
+                <cac:TaxScheme>
+                    <cbc:ID schemeAgencyID="6" schemeID="UN/ECE 5153">VAT</cbc:ID>
+                </cac:TaxScheme>
+            </cac:TaxCategory>
+        </cac:TaxSubtotal>`;
+      })
+      .join("");
+
+    // Document Level Allowance/Charges
+    const allowanceChargesXml = (dto.allowanceCharges || [])
+      .map((ac) => {
+        return `
+    <cac:AllowanceCharge>
+        <cbc:ChargeIndicator>${ac.chargeIndicator}</cbc:ChargeIndicator>
+        ${ac.reasonCode ? `<cbc:AllowanceChargeReasonCode>${ac.reasonCode}</cbc:AllowanceChargeReasonCode>` : ""}
+        ${ac.reason ? `<cbc:AllowanceChargeReason>${ac.reason}</cbc:AllowanceChargeReason>` : ""}
+        <cbc:Amount currencyID="${invoice.currency || "SAR"}">${ac.amount.toFixed(2)}</cbc:Amount>
+        <cac:TaxCategory>
+            <cbc:ID schemeAgencyID="6" schemeID="UN/ECE 5305">${ac.taxCategory || "S"}</cbc:ID>
+            <cbc:Percent>${(ac.vatPercent || 15).toFixed(2)}</cbc:Percent>
+            <cac:TaxScheme>
+                <cbc:ID schemeAgencyID="6" schemeID="UN/ECE 5153">VAT</cbc:ID>
+            </cac:TaxScheme>
+        </cac:TaxCategory>
+    </cac:AllowanceCharge>`;
+      })
+      .join("");
+
     // Customer Party (Full details for Standard, Basic for Simplified)
     let customerPartyXml = "";
     if (isStandard && customer) {
+      // Use the business name if provided, otherwise the guest name
+      const customerName =
+        customer.registrationName || customer.name || "Customer";
       customerPartyXml = `
     <cac:AccountingCustomerParty>
         <cac:Party>
+            <cac:PartyIdentification>
+                <cbc:ID schemeID="CRN">${customer.crNumber || "1010010000"}</cbc:ID>
+            </cac:PartyIdentification>
+            <cac:PostalAddress>
+                <cbc:StreetName>${customer.address?.street || "Street"}</cbc:StreetName>
+                <cbc:BuildingNumber>${customer.address?.buildingNumber || "0000"}</cbc:BuildingNumber>
+                <cbc:CitySubdivisionName>${customer.address?.district || "District"}</cbc:CitySubdivisionName>
+                <cbc:CityName>${customer.address?.city || "City"}</cbc:CityName>
+                <cbc:PostalZone>${customer.address?.postalCode || "00000"}</cbc:PostalZone>
+                <cac:Country><cbc:IdentificationCode>${customer.address?.country || "SA"}</cbc:IdentificationCode></cac:Country>
+            </cac:PostalAddress>
             ${
               customer.vatNumber
                 ? `
@@ -91,16 +189,8 @@ export class XmlTemplateService {
                 : ""
             }
             <cac:PartyLegalEntity>
-                <cbc:RegistrationName>${customer.registrationName || customer.name || "Customer"}</cbc:RegistrationName>
+                <cbc:RegistrationName>${customerName}</cbc:RegistrationName>
             </cac:PartyLegalEntity>
-            <cac:PostalAddress>
-                <cbc:StreetName>${customer.address?.street || "Street"}</cbc:StreetName>
-                <cbc:BuildingNumber>${customer.address?.buildingNumber || "0000"}</cbc:BuildingNumber>
-                <cbc:CitySubdivisionName>${customer.address?.district || "District"}</cbc:CitySubdivisionName>
-                <cbc:CityName>${customer.address?.city || "City"}</cbc:CityName>
-                <cbc:PostalZone>${customer.address?.postalCode || "00000"}</cbc:PostalZone>
-                <cac:Country><cbc:IdentificationCode>${customer.address?.country || "SA"}</cbc:IdentificationCode></cac:Country>
-            </cac:PostalAddress>
         </cac:Party>
     </cac:AccountingCustomerParty>`;
     } else {
@@ -181,27 +271,19 @@ export class XmlTemplateService {
         </cac:Party>
     </cac:AccountingSupplierParty>${customerPartyXml}
     <cac:TaxTotal>
-        <cbc:TaxAmount currencyID="${invoice.currency || "SAR"}">${totals.vatTotal.toFixed(2)}</cbc:TaxAmount>
-        <cac:TaxSubtotal>
-            <cbc:TaxableAmount currencyID="${invoice.currency || "SAR"}">${totals.taxExclusiveTotal.toFixed(2)}</cbc:TaxableAmount>
-            <cbc:TaxAmount currencyID="${invoice.currency || "SAR"}">${totals.vatTotal.toFixed(2)}</cbc:TaxAmount>
-            <cac:TaxCategory>
-                <cbc:ID schemeAgencyID="6" schemeID="UN/ECE 5305">S</cbc:ID>
-                <cbc:Percent>15.00</cbc:Percent>
-                <cac:TaxScheme>
-                    <cbc:ID schemeAgencyID="6" schemeID="UN/ECE 5153">VAT</cbc:ID>
-                </cac:TaxScheme>
-            </cac:TaxCategory>
-        </cac:TaxSubtotal>
+        <cbc:TaxAmount currencyID="${invoice.currency || "SAR"}">${totals.vatTotal.toFixed(2)}</cbc:TaxAmount>${taxSubtotalsXml}
     </cac:TaxTotal>
     <cac:TaxTotal>
-        <cbc:TaxAmount currencyID="SAR">${totals.vatTotal.toFixed(2)}</cbc:TaxAmount>
-    </cac:TaxTotal>
+        <cbc:TaxAmount currencyID="SAR">${(totals.taxCurrencyVatTotal ?? totals.vatTotal).toFixed(2)}</cbc:TaxAmount>
+    </cac:TaxTotal>${allowanceChargesXml}
     <cac:LegalMonetaryTotal>
         <cbc:LineExtensionAmount currencyID="${invoice.currency || "SAR"}">${totals.lineExtensionTotal.toFixed(2)}</cbc:LineExtensionAmount>
         <cbc:TaxExclusiveAmount currencyID="${invoice.currency || "SAR"}">${totals.taxExclusiveTotal.toFixed(2)}</cbc:TaxExclusiveAmount>
         <cbc:TaxInclusiveAmount currencyID="${invoice.currency || "SAR"}">${totals.taxInclusiveTotal.toFixed(2)}</cbc:TaxInclusiveAmount>
-        <cbc:AllowanceTotalAmount currencyID="${invoice.currency || "SAR"}">0.00</cbc:AllowanceTotalAmount>
+        ${totals.allowanceTotalAmount ? `<cbc:AllowanceTotalAmount currencyID="${invoice.currency || "SAR"}">${totals.allowanceTotalAmount.toFixed(2)}</cbc:AllowanceTotalAmount>` : ""}
+        ${totals.chargeTotalAmount ? `<cbc:ChargeTotalAmount currencyID="${invoice.currency || "SAR"}">${totals.chargeTotalAmount.toFixed(2)}</cbc:ChargeTotalAmount>` : ""}
+        ${totals.prepaidAmount ? `<cbc:PrepaidAmount currencyID="${invoice.currency || "SAR"}">${totals.prepaidAmount.toFixed(2)}</cbc:PrepaidAmount>` : ""}
+        ${totals.payableRoundingAmount ? `<cbc:PayableRoundingAmount currencyID="${invoice.currency || "SAR"}">${totals.payableRoundingAmount.toFixed(2)}</cbc:PayableRoundingAmount>` : ""}
         <cbc:PayableAmount currencyID="${invoice.currency || "SAR"}">${totals.payableAmount.toFixed(2)}</cbc:PayableAmount>
     </cac:LegalMonetaryTotal>${lineItemsXml}
 </Invoice>`;
