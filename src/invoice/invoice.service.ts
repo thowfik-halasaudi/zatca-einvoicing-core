@@ -105,8 +105,15 @@ export class InvoiceService {
 
       console.log("🎉 SUCCESS: Invoice signed successfully.");
 
+      // Extract QR code from signed XML for the frontend
+      const qrMatch = signedXml.match(
+        /<cac:AdditionalDocumentReference>\s*<cbc:ID>QR<\/cbc:ID>\s*<cac:Attachment>\s*<cbc:EmbeddedDocumentBinaryObject[^>]*>([^<]+)<\/cbc:EmbeddedDocumentBinaryObject>/i
+      );
+      const qrCode = qrMatch ? qrMatch[1].trim() : undefined;
+
       return {
         signedXml,
+        qrCode,
         fileName: `${serialNumber}_signed.xml`,
         message: "Invoice signed and QR code generated.",
       };
