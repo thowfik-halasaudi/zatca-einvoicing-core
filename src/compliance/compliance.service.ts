@@ -197,14 +197,19 @@ export class ComplianceService {
 
     // 2. Load Signed XML
     const tempDir = await this.fileManager.getTempDir(commonName);
+
+    // Robustness: Strip _signed suffix if the user provided it (preventing double suffix)
+    const cleanSerialNumber = invoiceSerialNumber.replace(/_signed$/i, "");
+
     const signedPath = require("path").join(
       tempDir,
-      `${invoiceSerialNumber}_signed.xml`
+      `${cleanSerialNumber}_signed.xml`
     );
 
     if (!(await this.fileManager.exists(signedPath))) {
+      this.logger.error(`Signed XML not found at: ${signedPath}`);
       throw new NotFoundException(
-        `Signed XML not found for ${invoiceSerialNumber}. Please run Step 3 (sign) first.`
+        `Signed XML not found for ${cleanSerialNumber}. Check if commonName "${commonName}" matches the invoice prefix.`
       );
     }
 

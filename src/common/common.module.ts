@@ -8,8 +8,10 @@ import { FileManagerService } from "./file-manager.service";
  * Provides shared utilities for CLI execution and file management
  * These services are the foundation for replicating PHP's shell_exec and file operations
  */
+import { SequenceService } from "./sequence.service";
+
 @Module({
-  providers: [CliExecutorService, FileManagerService],
-  exports: [CliExecutorService, FileManagerService],
+  providers: [CliExecutorService, FileManagerService, SequenceService],
+  exports: [CliExecutorService, FileManagerService, SequenceService],
 })
 export class CommonModule {}

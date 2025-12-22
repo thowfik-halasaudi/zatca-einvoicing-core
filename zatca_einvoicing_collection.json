@@ -1,0 +1,209 @@
+{
+  "info": {
+    "_postman_id": "zatca-einvoicing-core-collection",
+    "name": "ZATCA E-Invoicing Core",
+    "description": "API collection for ZATCA Phase 2 E-Invoicing integration.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01: CSR Generation",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"commonName\": \"RADISSONGROUP\",\n  \"serialNumber\": \"1-Radisson|2-HMS|3-4b7a1c92-6f3d-4c2e-9a8f-1e9b2c7d5f44\",\n  \"organizationIdentifier\": \"301245987500003\",\n  \"organizationUnitName\": \"Radisson Blu Hotel Riyadh\",\n  \"organizationName\": \"Radisson Group\",\n  \"countryName\": \"SA\",\n  \"invoiceType\": \"1100\",\n  \"locationAddress\": \"Al Rashid St, Riyadh 13241, Saudi Arabia\",\n  \"industryBusinessCategory\": \"Hospitality\",\n  \"production\": false\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/compliance/onboard",
+          "host": ["{{base_url}}"],
+          "path": ["compliance", "onboard"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02: Get Compliance CSID",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"commonName\": \"RADISSONGROUP\",\n  \"otp\": \"123345\",\n  \"production\": false\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/compliance/issue-csid",
+          "host": ["{{base_url}}"],
+          "path": ["compliance", "issue-csid"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "03: Sign B2C Simplified Invoice",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"egs\": { \"commonName\": \"RADISSONGROUP\", \"vatNumber\": \"301245987500003\" },\n  \"invoice\": {\n    \"invoiceTypeCode\": \"388\",\n    \"invoiceTypeCodeName\": \"0211010\"\n  },\n  \"supplier\": {\n    \"registrationName\": \"Radisson Blu Hotel\",\n    \"vatNumber\": \"301245987500003\",\n    \"address\": { \"city\": \"Riyadh\", \"country\": \"SA\" }\n  },\n  \"customer\": { \"type\": \"B2C\", \"name\": \"Walk-in Guest\" },\n  \"lineItems\": [\n    {\n      \"lineId\": \"1\",\n      \"description\": \"Room Service\",\n      \"quantity\": 1,\n      \"unitPrice\": 1000.0,\n      \"taxExclusiveAmount\": 1000.0,\n      \"vatPercent\": 15,\n      \"vatAmount\": 150.0\n    }\n  ],\n  \"totals\": {\n    \"lineExtensionTotal\": 1000.0,\n    \"taxExclusiveTotal\": 1000.0,\n    \"vatTotal\": 150.0,\n    \"taxInclusiveTotal\": 1150.0,\n    \"payableAmount\": 1150.0\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/invoice/sign",
+          "host": ["{{base_url}}"],
+          "path": ["invoice", "sign"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "04: Sign B2B Standard Invoice",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"egs\": { \"commonName\": \"RADISSONGROUP\", \"vatNumber\": \"301245987500003\" },\n  \"invoice\": {\n    \"invoiceTypeCode\": \"388\",\n    \"invoiceTypeCodeName\": \"0111010\"\n  },\n  \"supplier\": {\n    \"registrationName\": \"Radisson Blu Hotel\",\n    \"vatNumber\": \"301245987500003\",\n    \"address\": { \"city\": \"Riyadh\", \"country\": \"SA\" }\n  },\n  \"customer\": {\n    \"type\": \"B2B\",\n    \"registrationName\": \"Corporate Client LTD\",\n    \"vatNumber\": \"399999999800003\",\n    \"address\": {\n      \"street\": \"King Fahad Rd\",\n      \"buildingNumber\": \"1111\",\n      \"district\": \"Olaya\",\n      \"city\": \"Riyadh\",\n      \"postalCode\": \"12222\",\n      \"country\": \"SA\"\n    }\n  },\n  \"lineItems\": [\n    {\n      \"lineId\": \"1\",\n      \"description\": \"Meeting Room Rental\",\n      \"quantity\": 1,\n      \"unitPrice\": 5000.0,\n      \"taxExclusiveAmount\": 5000.0,\n      \"vatPercent\": 15,\n      \"vatAmount\": 750.0\n    }\n  ],\n  \"totals\": {\n    \"lineExtensionTotal\": 5000.0,\n    \"taxExclusiveTotal\": 5000.0,\n    \"vatTotal\": 750.0,\n    \"taxInclusiveTotal\": 5750.0,\n    \"payableAmount\": 5750.0\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/invoice/sign",
+          "host": ["{{base_url}}"],
+          "path": ["invoice", "sign"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "05: Sign Credit Note",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"egs\": { \"commonName\": \"RADISSONGROUP\", \"vatNumber\": \"301245987500003\" },\n  \"invoice\": {\n    \"invoiceTypeCode\": \"381\",\n    \"invoiceTypeCodeName\": \"0211010\",\n    \"billingReferenceId\": \"RAD-SI-25-00000001\"\n  },\n  \"supplier\": {\n    \"registrationName\": \"Radisson Blu Hotel\",\n    \"vatNumber\": \"301245987500003\",\n    \"address\": { \"city\": \"Riyadh\", \"country\": \"SA\" }\n  },\n  \"customer\": { \"type\": \"B2C\", \"name\": \"Walk-in Guest\" },\n  \"lineItems\": [\n    {\n      \"lineId\": \"1\",\n      \"description\": \"Refund for Room Service\",\n      \"quantity\": 1,\n      \"unitPrice\": 200.0,\n      \"taxExclusiveAmount\": 200.0,\n      \"vatPercent\": 15,\n      \"vatAmount\": 30.0\n    }\n  ],\n  \"totals\": {\n    \"lineExtensionTotal\": 200.0,\n    \"taxExclusiveTotal\": 200.0,\n    \"vatTotal\": 30.0,\n    \"taxInclusiveTotal\": 230.0,\n    \"payableAmount\": 230.0\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/invoice/sign",
+          "host": ["{{base_url}}"],
+          "path": ["invoice", "sign"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "06: Sign Debit Note",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"egs\": { \"commonName\": \"RADISSONGROUP\", \"vatNumber\": \"301245987500003\" },\n  \"invoice\": {\n    \"invoiceTypeCode\": \"383\",\n    \"invoiceTypeCodeName\": \"0211010\",\n    \"billingReferenceId\": \"RAD-SI-25-00000001\"\n  },\n  \"supplier\": {\n    \"registrationName\": \"Radisson Blu Hotel\",\n    \"vatNumber\": \"301245987500003\",\n    \"address\": { \"city\": \"Riyadh\", \"country\": \"SA\" }\n  },\n  \"customer\": { \"type\": \"B2C\", \"name\": \"Walk-in Guest\" },\n  \"lineItems\": [\n    {\n      \"lineId\": \"1\",\n      \"description\": \"Additional Cleaning Fee\",\n      \"quantity\": 1,\n      \"unitPrice\": 50.0,\n      \"taxExclusiveAmount\": 50.0,\n      \"vatPercent\": 15,\n      \"vatAmount\": 7.5\n    }\n  ],\n  \"totals\": {\n    \"lineExtensionTotal\": 50.0,\n    \"taxExclusiveTotal\": 50.0,\n    \"vatTotal\": 7.5,\n    \"taxInclusiveTotal\": 57.5,\n    \"payableAmount\": 57.5\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/invoice/sign",
+          "host": ["{{base_url}}"],
+          "path": ["invoice", "sign"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "07: Sign Tax Exempt Invoice",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"egs\": { \"commonName\": \"RADISSONGROUP\", \"vatNumber\": \"301245987500003\" },\n  \"invoice\": {\n    \"invoiceTypeCode\": \"388\",\n    \"invoiceTypeCodeName\": \"0211010\"\n  },\n  \"supplier\": {\n    \"registrationName\": \"Radisson Blu Hotel\",\n    \"vatNumber\": \"301245987500003\",\n    \"address\": { \"city\": \"Riyadh\", \"country\": \"SA\" }\n  },\n  \"customer\": { \"type\": \"B2C\", \"name\": \"Walk-in Guest\" },\n  \"lineItems\": [\n    {\n      \"lineId\": \"1\",\n      \"description\": \"Medical Service (Exempt)\",\n      \"quantity\": 1,\n      \"unitPrice\": 500.0,\n      \"taxExclusiveAmount\": 500.0,\n      \"vatPercent\": 0,\n      \"vatAmount\": 0.0,\n      \"taxCategory\": \"E\"\n    }\n  ],\n  \"totals\": {\n    \"lineExtensionTotal\": 500.0,\n    \"taxExclusiveTotal\": 500.0,\n    \"vatTotal\": 0.0,\n    \"taxInclusiveTotal\": 500.0,\n    \"payableAmount\": 500.0\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/invoice/sign",
+          "host": ["{{base_url}}"],
+          "path": ["invoice", "sign"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "08: Compliance Check API",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"commonName\": \"RADISSONGROUP\",\n  \"invoiceSerialNumber\": \"RAD-SI-25-00000001\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/compliance/check",
+          "host": ["{{base_url}}"],
+          "path": ["compliance", "check"]
+        }
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ]
+}

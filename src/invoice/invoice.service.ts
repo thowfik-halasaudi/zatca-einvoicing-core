@@ -10,6 +10,8 @@ import { XmlTemplateService } from "./xml-template.service";
 import { SignInvoiceDto } from "./dto/sign-invoice.dto";
 import * as path from "path";
 
+import { SequenceService } from "../common/sequence.service";
+
 @Injectable()
 export class InvoiceService {
   private readonly logger = new Logger(InvoiceService.name);
@@ -17,12 +19,20 @@ export class InvoiceService {
   constructor(
     private readonly cliExecutor: CliExecutorService,
     private readonly fileManager: FileManagerService,
-    private readonly xmlTemplate: XmlTemplateService
+    private readonly xmlTemplate: XmlTemplateService,
+    private readonly sequenceService: SequenceService
   ) {}
 
   async signInvoice(dto: SignInvoiceDto) {
     const { egs, invoice } = dto;
     const commonName = egs.commonName;
+
+    // 1. Generate Sequence Automatically (Ignore payload values)
+    this.logger.log(`Generating automatic sequence for ${commonName}...`);
+    const seqData = await this.sequenceService.generateNextSerialNumber(dto);
+    invoice.invoiceSerialNumber = seqData.serialNumber;
+    invoice.invoiceCounterNumber = seqData.counter;
+
     const serialNumber = invoice.invoiceSerialNumber;
     const folderName = commonName.toLowerCase().replace(/\s+/g, "_");
 

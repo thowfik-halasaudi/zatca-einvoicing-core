@@ -46,8 +46,8 @@ export class EgsDto {
 
 export class InvoiceMetaDto {
   @IsString()
-  @IsNotEmpty()
-  invoiceSerialNumber: string;
+  @IsOptional()
+  invoiceSerialNumber?: string;
 
   @IsString()
   @IsOptional()
@@ -66,7 +66,8 @@ export class InvoiceMetaDto {
   currency?: string = "SAR";
 
   @IsNumber()
-  invoiceCounterNumber: number;
+  @IsOptional()
+  invoiceCounterNumber?: number;
 
   @IsString()
   @IsOptional()
