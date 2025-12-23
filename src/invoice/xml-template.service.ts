@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { SignInvoiceDto } from "./dto/sign-invoice.dto";
+import * as crypto from "crypto";
 
 @Injectable()
 export class XmlTemplateService {
@@ -217,7 +218,7 @@ export class XmlTemplateService {
     </ext:UBLExtensions>
     <cbc:ProfileID>reporting:1.0</cbc:ProfileID>
     <cbc:ID>${invoice.invoiceSerialNumber}</cbc:ID>
-    <cbc:UUID>${invoice.uuid || "8e354912-7474-42b6-aa6d-519267bb6c22"}</cbc:UUID>
+    <cbc:UUID>${crypto.randomUUID()}</cbc:UUID>
     <cbc:IssueDate>${finalDate}</cbc:IssueDate>
     <cbc:IssueTime>${finalTime}</cbc:IssueTime>
     <cbc:InvoiceTypeCode name="${invoice.invoiceTypeCodeName || (isStandard ? "0111010" : "0211010")}">${invoice.invoiceTypeCode || "388"}</cbc:InvoiceTypeCode>

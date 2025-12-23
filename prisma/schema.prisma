@@ -16,52 +16,61 @@ model InvoiceCounter {
 }
 
 model Invoice {
-  id                    String    @id @default(uuid())
-  invoiceNumber        String    @unique
-  uuid                 String    @unique @default(uuid())
-  invoiceTypeCode      String    // 380, 381, 383, 386, 388
-  invoiceCategory      String    // STANDARD, SIMPLIFIED
-  issueDateTime        DateTime
+  id                     String    @id @default(uuid())
+  invoiceNumber          String    @unique
+  uuid                   String    @unique @default(uuid())
+  invoiceTypeCode        String    // 380, 381, 383, 386, 388
+  invoiceTypeCodeName    String    // 0211010, 0211011, etc.
+  invoiceCategory        String    // STANDARD, SIMPLIFIED
+  issueDateTime          DateTime
+  
+  // EGS Reference
+  commonName             String    // Reference to EgsUnit
+  egsUnit                EgsUnit   @relation(fields: [commonName], references: [commonName])
   
   // Seller
-  sellerName           String
-  sellerVatNumber      String
-  sellerAddress        String
+  sellerName             String
+  sellerVatNumber        String
+  sellerAddress          String
   
   // Buyer
-  buyerName            String?
-  buyerVatNumber       String?
-  buyerAddress         String?
+  buyerName              String?
+  buyerVatNumber         String?
+  buyerAddress           String?
   
-  // References
+  // References (for Credit/Debit Notes)
   referenceInvoiceNumber String?
-  referenceUUID         String?
-  referenceIssueDate    DateTime?
+  referenceUUID          String?
+  referenceIssueDate     DateTime?
   
-  // Advance
-  prepaidAmount        Float?    @default(0)
-  remainingAmount      Float?    @default(0)
+  // Advance Payments
+  prepaidAmount          Float?    @default(0)
+  remainingAmount        Float?    @default(0)
   
   // Totals
-  subTotal             Float
-  vatAmount            Float
-  totalAmount          Float
-  currency             String    @default("SAR")
+  subTotal               Float
+  vatAmount              Float
+  totalAmount            Float
+  currency               String    @default("SAR")
   
-  signedXml            String?  @db.Text
+  // Signed XML Storage
+  signedXml              String?   @db.Text
+  qrCode                 String?   @db.Text
 
-  status               String    @default("ISSUED") // ISSUED, CREDITED, DEBITED
+  // Status
+  status                 String    @default("ISSUED") // ISSUED, CLEARED, REPORTED, REJECTED
   
   // Relations
-  items                InvoiceItem[]
-  hash                 InvoiceHash?
-  submission           ZatcaSubmission?
+  items                  InvoiceItem[]
+  hash                   InvoiceHash?
+  submission             ZatcaSubmission?
   
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   @@index([invoiceNumber])
   @@index([uuid])
+  @@index([commonName])
 }
 
 model InvoiceItem {
@@ -99,6 +108,8 @@ model ZatcaSubmission {
   
   submissionType  String   // CLEARANCE, REPORTING
   zatcaStatus     String   @default("PENDING") // PENDING, CLEARED, REPORTED, REJECTED
+  reportingStatus String?  // From ZATCA: REPORTED, NOT_REPORTED, etc.
+  clearanceStatus String?  // From ZATCA: CLEARED, NOT_CLEARED, etc.
   attemptCount    Int      @default(0)
   lastAttemptAt   DateTime?
   qrCode          String?  @db.Text
@@ -108,8 +119,8 @@ model ZatcaSubmission {
 }
 
 model EgsUnit {
-  id                        String   @id @default(uuid())
-  commonName                String   @unique
+  id                        String    @id @default(uuid())
+  commonName                String    @unique
   serialNumber              String
   organizationIdentifier    String
   organizationUnitName      String
@@ -118,18 +129,21 @@ model EgsUnit {
   invoiceType               String
   locationAddress           String
   industryBusinessCategory  String
-  production                Boolean  @default(false)
+  production                Boolean   @default(false)
 
-  csr                       String   @db.Text
-  privateKey                String   @db.Text
-  onboardingConfig           String?  @db.Text
+  csr                       String    @db.Text
+  privateKey                String    @db.Text
+  onboardingConfig           String?   @db.Text
 
-  binarySecurityToken       String?  @db.Text
-  secret                    String?  @db.Text
+  binarySecurityToken       String?   @db.Text
+  secret                    String?   @db.Text
   requestId                 String?
 
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
+  // Relations
+  invoices                  Invoice[]
+
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
   @@index([commonName])
 }

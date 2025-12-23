@@ -294,55 +294,55 @@ export class ComplianceService {
     console.log(`👤 Profile: ${commonName}`);
     console.log(`🔢 Serial: ${invoiceSerialNumber}`);
 
-    // 1. Load Security Tokens from DB
+    // 1. Load Invoice from Database
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { invoiceNumber: invoiceSerialNumber },
+      include: { hash: true },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException(
+        `Invoice ${invoiceSerialNumber} not found in database.`
+      );
+    }
+
+    if (!invoice.signedXml) {
+      throw new BadRequestException(
+        `Invoice ${invoiceSerialNumber} does not have signed XML stored.`
+      );
+    }
+
+    // 2. Load Security Tokens
     const egsUnit = await this.prisma.egsUnit.findUnique({
       where: { commonName },
     });
 
     if (!egsUnit || !egsUnit.binarySecurityToken || !egsUnit.secret) {
       throw new NotFoundException(
-        `Security tokens not found for ${commonName} in database. Please run Step 2 (issue-csid) first.`
+        `Security tokens not found for ${commonName}. Run Issue CSID first.`
       );
     }
 
-    console.log("📂 [STEP 4.1] Loading security tokens from database...");
     const certificate = egsUnit.binarySecurityToken.trim();
     const secret = egsUnit.secret.trim();
 
-    console.log(`✅ Certificate Loaded (Length: ${certificate.length})`);
-    console.log(`✅ Secret Loaded (Length: ${secret.length})`);
+    // 3. Prepare Data
+    // We trust our DB metadata, but we can also re-extract if needed.
+    // Using DB metadata is faster and safer.
+    const uuid = invoice.uuid;
+    const invoiceHash = invoice.hash?.currentInvoiceHash;
 
-    // 2. Load Signed XML
-    const tempDir = await this.fileManager.getTempDir(commonName);
-
-    // Robustness: Strip _signed suffix if the user provided it (preventing double suffix)
-    const cleanSerialNumber = invoiceSerialNumber.replace(/_signed$/i, "");
-
-    const signedPath = path.join(tempDir, `${cleanSerialNumber}_signed.xml`);
-
-    if (!(await this.fileManager.exists(signedPath))) {
-      this.logger.error(`Signed XML not found at: ${signedPath}`);
-      throw new NotFoundException(
-        `Signed XML not found for ${cleanSerialNumber}. Check if commonName "${commonName}" matches the invoice prefix.`
+    if (!invoiceHash) {
+      throw new BadRequestException(
+        "Invoice hash missing from database record."
       );
     }
 
-    const signedXml = await this.fileManager.readFile(signedPath);
-
-    const { uuid, invoiceHash } = this.extractInvoiceMetadata(signedXml);
-
-    console.log("--------------------------------------------------");
-    console.log("🔍 [STEP 4.3] EXTRACTION RESULTS");
-    console.log(`🆔 Extracted UUID: ${uuid}`);
-    console.log(`📦 Extracted Hash: ${invoiceHash}`);
-    console.log(`📏 Hash Length: ${invoiceHash.length}`);
-    console.log("--------------------------------------------------");
+    console.log(`🆔 UUID: ${uuid}`);
+    console.log(`📦 Hash: ${invoiceHash}`);
 
     // 4. Call ZATCA API
-    const signedXmlBase64 = Buffer.from(signedXml).toString("base64");
-    console.log(
-      `🚀 [STEP 4.4] Routing to ZATCA Client... (XML Base64 length: ${signedXmlBase64.length})`
-    );
+    const signedXmlBase64 = Buffer.from(invoice.signedXml).toString("base64");
 
     const result = await this.zatcaClient.checkCompliance(
       invoiceHash,
@@ -350,21 +350,23 @@ export class ComplianceService {
       signedXmlBase64,
       certificate,
       secret,
-      false
+      false // Check is usually sandbox
     );
 
-    // 5. Store the compliance result for record-keeping
-    const reportPath = await this.fileManager.writeTempFile(
-      commonName,
-      `${invoiceSerialNumber}_compliance_report.json`,
-      JSON.stringify(result, null, 2)
+    // 5. Update Status in Database (PERSISTENCE FIX)
+    const isStandard = invoice.invoiceTypeCodeName.startsWith("01");
+    const submissionType = isStandard ? "CLEARANCE" : "REPORTING";
+    const overallStatus = await this.updateSubmissionStatus(
+      invoice.id,
+      result,
+      submissionType,
+      isStandard
     );
-    console.log(`✅ [STORAGE] Compliance report saved to: ${reportPath}`);
 
     return {
       ...result,
-      reportPath,
-      message: `Compliance check completed for ${invoiceSerialNumber}. Results saved to disk.`,
+      overallStatus,
+      message: "Compliance check pass completed successfully.",
     };
   }
 
@@ -384,53 +386,50 @@ export class ComplianceService {
     console.log(`👤 Profile: ${commonName}`);
     console.log(`🔢 Serial: ${invoiceSerialNumber}`);
 
-    // 1. Load Security Tokens from DB
+    // 1. Load Invoice
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { invoiceNumber: invoiceSerialNumber },
+      include: { hash: true },
+    });
+
+    if (!invoice || !invoice.signedXml || !invoice.hash?.currentInvoiceHash) {
+      throw new NotFoundException(
+        `Invoice ${invoiceSerialNumber} not found or missing signed XML/hash.`
+      );
+    }
+
+    // 2. Load Tokens
     const egsUnit = await this.prisma.egsUnit.findUnique({
       where: { commonName },
     });
 
     if (!egsUnit || !egsUnit.binarySecurityToken || !egsUnit.secret) {
       throw new NotFoundException(
-        `Security tokens not found for ${commonName} in database.`
+        `Security tokens not found for ${commonName}.`
       );
     }
 
     const certificate = egsUnit.binarySecurityToken.trim();
     const secret = egsUnit.secret.trim();
 
-    // 2. Load Signed XML
-    const tempDir = await this.fileManager.getTempDir(commonName);
-    const cleanSerialNumber = invoiceSerialNumber.replace(/_signed$/i, "");
-    const signedPath = path.join(tempDir, `${cleanSerialNumber}_signed.xml`);
-
-    if (!(await this.fileManager.exists(signedPath))) {
-      throw new NotFoundException(
-        `Signed XML not found for ${cleanSerialNumber}.`
-      );
-    }
-
-    const signedXml = await this.fileManager.readFile(signedPath);
-    const signedXmlBase64 = Buffer.from(signedXml).toString("base64");
-
-    // 3. Extract Metadata & Strategy (Clearance vs Reporting)
-    const { uuid, invoiceHash, typeCode } =
-      this.extractInvoiceMetadata(signedXml);
-
+    // 3. Strategy
+    // Determine type from Invoice Table metadata
     // ZATCA Rule: 01xxxx is Standard (Clearance), 02xxxx is Simplified (Reporting)
-    const isStandard = typeCode.startsWith("01");
+    const isStandard = invoice.invoiceTypeCodeName.startsWith("01");
     const submissionType = isStandard ? "CLEARANCE" : "REPORTING";
 
     console.log(
       `📍 Detected Type: ${isStandard ? "STANDARD (B2B)" : "SIMPLIFIED (B2C)"}`
     );
-    console.log(`🛰️ Routing to ${submissionType} endpoint...`);
 
-    // 4. API Execution
+    const signedXmlBase64 = Buffer.from(invoice.signedXml).toString("base64");
+
+    // 4. Execute
     let result;
     if (isStandard) {
       result = await this.zatcaClient.clearInvoice(
-        invoiceHash,
-        uuid,
+        invoice.hash.currentInvoiceHash,
+        invoice.uuid,
         signedXmlBase64,
         certificate,
         secret,
@@ -438,8 +437,8 @@ export class ComplianceService {
       );
     } else {
       result = await this.zatcaClient.reportInvoice(
-        invoiceHash,
-        uuid,
+        invoice.hash.currentInvoiceHash,
+        invoice.uuid,
         signedXmlBase64,
         certificate,
         secret,
@@ -447,19 +446,78 @@ export class ComplianceService {
       );
     }
 
-    // 5. Save Evidence
-    const resultPath = await this.fileManager.writeTempFile(
-      commonName,
-      `${invoiceSerialNumber}_zatca_result.json`,
-      JSON.stringify(result, null, 2)
+    // 5. Update Persistence using shared logic
+    const overallStatus = await this.updateSubmissionStatus(
+      invoice.id,
+      result,
+      submissionType,
+      isStandard
     );
 
     return {
       ...result,
       submissionType,
-      resultPath,
       message: `Invoice successfully ${isStandard ? "cleared" : "reported"} by ZATCA.`,
+      overallStatus,
     };
+  }
+
+  private async updateSubmissionStatus(
+    invoiceId: string,
+    result: any,
+    submissionType: string,
+    isStandard: boolean
+  ) {
+    const reportingStatus = result.reportingStatus || null;
+    const clearanceStatus = result.clearanceStatus || null;
+
+    // Determine overall status mapping
+    // ZATCA Success Criteria:
+    // 1. reportingStatus is "REPORTED" (B2C)
+    // 2. validationResults.status is "PASS" (Standard B2B Clearance often returns "PASS" without explicitly setting clearanceStatus in some SDK versions)
+    // 3. clearanceStatus is "CLEARED"
+    let overallStatus = "FAILED";
+    if (
+      reportingStatus === "REPORTED" ||
+      clearanceStatus === "CLEARED" ||
+      result.validationResults?.status === "PASS"
+    ) {
+      overallStatus = isStandard ? "CLEARED" : "REPORTED";
+    }
+
+    console.log(
+      `[PERSISTENCE] 📊 Syncing Status: ${overallStatus} | Type: ${submissionType}`
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.zatcaSubmission.upsert({
+        where: { invoiceId },
+        create: {
+          invoiceId,
+          submissionType,
+          zatcaStatus: overallStatus,
+          reportingStatus,
+          clearanceStatus,
+          zatcaResponse: result as any,
+          lastAttemptAt: new Date(),
+          attemptCount: 1,
+        },
+        update: {
+          zatcaStatus: overallStatus,
+          reportingStatus,
+          clearanceStatus,
+          zatcaResponse: result as any,
+          attemptCount: { increment: 1 },
+          lastAttemptAt: new Date(),
+        },
+      }),
+      this.prisma.invoice.update({
+        where: { id: invoiceId },
+        data: { status: overallStatus },
+      }),
+    ]);
+
+    return overallStatus;
   }
 
   /**
