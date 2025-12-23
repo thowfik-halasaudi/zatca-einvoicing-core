@@ -11,6 +11,9 @@ import { CheckComplianceDto } from "./dto/check-compliance.dto";
 import { SubmitZatcaDto } from "./dto/submit-zatca.dto";
 import { ZatcaClientService } from "../zatca/zatca-client.service";
 import { FileManagerService } from "../common/file-manager.service";
+import { PrismaService } from "../prisma/prisma.service";
+import * as path from "path";
+import { Prisma } from "@prisma/client";
 
 /**
  * ComplianceService
@@ -29,7 +32,8 @@ export class ComplianceService {
   constructor(
     private readonly cryptoCli: CryptoCliService,
     private readonly zatcaClient: ZatcaClientService,
-    private readonly fileManager: FileManagerService
+    private readonly fileManager: FileManagerService,
+    private readonly prisma: PrismaService
   ) {}
 
   /**
@@ -37,7 +41,7 @@ export class ComplianceService {
    *
    * Triggers the Step 1 of Onboarding: Local Key and CSR Generation.
    * It uses the CryptoCliService to talk to the Fatoora Java SDK.
-   * The generated files are saved in the `onboarding_data/` folder.
+   * The generated data are saved directly to PostgreSQL.
    */
   async onboardEgs(dto: OnboardEgsDto) {
     console.log("==================================================");
@@ -46,29 +50,128 @@ export class ComplianceService {
     console.log(`👤 Target: ${dto.commonName}`);
     console.log("==================================================");
 
-    // Step 1: Build CSR configuration
+    /**
+     * ==================================================
+     * 1️⃣ HARD VALIDATION (DO NOT SKIP)
+     * ==================================================
+     */
+    if (!dto.commonName?.trim()) {
+      throw new BadRequestException("commonName is required");
+    }
+
+    if (!dto.serialNumber?.trim()) {
+      throw new BadRequestException("serialNumber is required");
+    }
+
+    if (!dto.organizationIdentifier?.trim()) {
+      throw new BadRequestException("organizationIdentifier is required");
+    }
+
+    if (!dto.organizationName?.trim()) {
+      throw new BadRequestException("organizationName is required");
+    }
+
+    /**
+     * ==================================================
+     * 1️⃣b CHECK IF ALREADY EXISTS (RESTRICTION)
+     * ==================================================
+     */
+    const existingUnit = await this.prisma.egsUnit.findUnique({
+      where: { commonName: dto.commonName },
+    });
+
+    if (existingUnit) {
+      this.logger.warn(
+        `Attempt to re-onboard existing unit: ${dto.commonName}`
+      );
+      throw new BadRequestException(
+        `Unit with Common Name "${dto.commonName}" already exists. To re-onboard, please delete the existing record first or use a different name.`
+      );
+    }
+
+    /**
+     * ==================================================
+     * 2️⃣ BUILD CSR CONFIG
+     * ==================================================
+     */
     console.log("🛠️ [STEP 1.1] Building CSR configuration...");
     const csrConfig = this.cryptoCli.buildCSRConfig({
       ...dto,
-      production: !!dto.production,
+      production: Boolean(dto.production),
     });
 
-    // Step 1b: Generate CSR and Private Key locally
+    /**
+     * ==================================================
+     * 3️⃣ GENERATE CSR + PRIVATE KEY (FATOORA CLI)
+     * ==================================================
+     */
     console.log("🛠️ [STEP 1.2] Generating Keys and CSR using Fatoora CLI...");
     const { privateKey, csr } = await this.cryptoCli.generateOnboardingData(
       dto.commonName,
       csrConfig
     );
 
-    console.log("\n✅ STEP 1 COMPLETE: Keys and CSR generated and stored.");
-    console.log(
-      `📁 Location: onboarding_data/${dto.commonName.toLowerCase().replace(/\s+/g, "_")}/`
-    );
+    /**
+     * ==================================================
+     * 4️⃣ PREPARE PRISMA INPUTS (STRICT)
+     * ==================================================
+     */
+
+    const createData: Prisma.EgsUnitCreateInput = {
+      commonName: dto.commonName,
+      serialNumber: dto.serialNumber,
+
+      organizationIdentifier: dto.organizationIdentifier, // ✅ REQUIRED
+
+      organizationUnitName: dto.organizationUnitName,
+      organizationName: dto.organizationName,
+      countryName: dto.countryName,
+      invoiceType: String(dto.invoiceType),
+      locationAddress: dto.locationAddress,
+      industryBusinessCategory: dto.industryBusinessCategory,
+      production: Boolean(dto.production),
+
+      csr,
+      privateKey,
+      onboardingConfig: JSON.stringify(csrConfig),
+    };
+
+    /**
+     * ==================================================
+     * 5️⃣ STORE IN DATABASE
+     * ==================================================
+     */
+    console.log("--------------------------------------------------");
+    console.log("📂 [DB AUDIT] SAVING NEW EGS UNIT");
+    console.log(`🆔 Common Name: ${dto.commonName}`);
+    console.log("--------------------------------------------------");
+
+    try {
+      await this.prisma.egsUnit.create({
+        data: createData,
+      });
+
+      console.log("✅ [DB AUDIT] CREATE SUCCESSFUL");
+    } catch (e) {
+      console.error("❌ [DB AUDIT] UPSERT FAILED");
+      console.error(e.message);
+      throw e;
+    }
+
+    /**
+     * ==================================================
+     * 6️⃣ FINAL RESPONSE
+     * ==================================================
+     */
+    console.log("\n✅ STEP 1 COMPLETE: Keys and CSR generated & stored");
 
     return {
-      privateKey,
       csr,
-      message: `Step 1 complete for ${dto.commonName}. Please use Step 2 (issue-csid) with an OTP to get your certificate.`,
+      privateKey,
+      commonName: dto.commonName,
+      serialNumber: dto.serialNumber,
+      message:
+        "Step 1 complete. CSR & private key generated and stored successfully. Proceed to issue CSID.",
     };
   }
 
@@ -76,7 +179,7 @@ export class ComplianceService {
    * issueCsid
    *
    * Triggers Step 2 of Onboarding: Requesting the Certificate.
-   * It reads the CSR generated in Step 1 from disk and sends it along with the OTP
+   * It reads the CSR generated in Step 1 from database and sends it along with the OTP
    * to ZATCA. The resulting CSID is what allows the system to sign and report invoices.
    */
   async issueCsid(dto: IssueCsidDto) {
@@ -84,22 +187,21 @@ export class ComplianceService {
     console.log(`👤 Targeted Common Name: ${dto.commonName}`);
     console.log(`🔑 Provided OTP: ${dto.otp}`);
 
-    const csrPath = this.fileManager.getOnboardingFilePath(
-      dto.commonName,
-      "egs-registration.csr"
-    );
-    console.log(`🔍 Searching for CSR at: ${csrPath}`);
+    const egsUnit = await this.prisma.egsUnit.findUnique({
+      where: { commonName: dto.commonName },
+    });
 
-    if (!(await this.fileManager.exists(csrPath))) {
-      console.log("❌ ERROR: CSR file not found on disk.");
+    if (!egsUnit || !egsUnit.csr) {
+      console.log("❌ ERROR: CSR data not found in database.");
       throw new NotFoundException(
-        `CSR file not found for ${dto.commonName}. Please run Step 1 (onboard) first.`
+        `Onboarding data (CSR) not found for ${dto.commonName} in database. Please run Step 1 (onboard) first.`
       );
     }
 
-    console.log("✅ CSR file located. Reading content...");
-    const csr = await this.fileManager.readFile(csrPath);
-    console.log("✅ CSR content loaded successfully.");
+    console.log("✅ CSR record found in DB. Loading content...");
+    const csr = egsUnit.csr;
+    const privateKey = egsUnit.privateKey;
+    console.log("✅ CSR and Private Key loaded successfully from database.");
 
     // We don't have the private key string here easily if it's only on disk,
     // but we return what we get from the API
@@ -108,7 +210,8 @@ export class ComplianceService {
       dto.commonName,
       csr,
       dto.otp,
-      !!dto.production
+      !!dto.production,
+      privateKey
     );
   }
 
@@ -139,27 +242,35 @@ export class ComplianceService {
     console.log("✅ [API CALL] Response received from ZATCA.");
     console.log(`🆔 RequestID: ${issuedData.requestID}`);
 
-    // Persist the certificate and secret
-    console.log("📂 [STORAGE] Saving security tokens to disk...");
-    await this.fileManager.writeOnboardingFile(
-      commonName,
-      "ccsid-certificate.pem",
-      issuedData.binarySecurityToken
-    );
-    await this.fileManager.writeOnboardingFile(
-      commonName,
-      "ccsid-secret.txt",
-      issuedData.secret
-    );
+    // Persist the certificate and secret to DB
+    console.log("--------------------------------------------------");
+    console.log("📂 [DB AUDIT] UPDATING SECURITY TOKENS");
+    console.log(`🆔 Target Common Name: ${commonName}`);
+    console.log("--------------------------------------------------");
+
+    try {
+      await this.prisma.egsUnit.update({
+        where: { commonName },
+        data: {
+          binarySecurityToken: issuedData.binarySecurityToken,
+          secret: issuedData.secret,
+          requestId: issuedData.requestID?.toString(),
+        },
+      });
+      console.log("✅ [DB AUDIT] UPDATE SUCCESSFUL.");
+    } catch (e) {
+      console.log("❌ [DB AUDIT] UPDATE FAILED!");
+      console.log(`❗ Error Detail: ${e.message}`);
+      throw e;
+    }
+
     console.log(
-      "✅ [STORAGE] ccsid-certificate.pem and ccsid-secret.txt saved successfully."
+      "✅ [STORAGE] Certificate and Secret saved to database successfully."
     );
 
     console.log("\n==================================================");
     console.log("🎉 SUCCESS: ONBOARDING PROCESS FINISHED");
-    console.log(
-      `📁 Workspace: onboarding_data/${commonName.toLowerCase().replace(/\s+/g, "_")}/`
-    );
+    console.log("💾 Data stored securely in PostgreSQL.");
     console.log("==================================================\n");
 
     return {
@@ -183,31 +294,20 @@ export class ComplianceService {
     console.log(`👤 Profile: ${commonName}`);
     console.log(`🔢 Serial: ${invoiceSerialNumber}`);
 
-    // 1. Load Security Tokens
-    const certPath = this.fileManager.getOnboardingFilePath(
-      commonName,
-      "ccsid-certificate.pem"
-    );
-    const secretPath = this.fileManager.getOnboardingFilePath(
-      commonName,
-      "ccsid-secret.txt"
-    );
+    // 1. Load Security Tokens from DB
+    const egsUnit = await this.prisma.egsUnit.findUnique({
+      where: { commonName },
+    });
 
-    if (
-      !(await this.fileManager.exists(certPath)) ||
-      !(await this.fileManager.exists(secretPath))
-    ) {
+    if (!egsUnit || !egsUnit.binarySecurityToken || !egsUnit.secret) {
       throw new NotFoundException(
-        `Security tokens not found for ${commonName}. Please run Step 2 (issue-csid) first.`
+        `Security tokens not found for ${commonName} in database. Please run Step 2 (issue-csid) first.`
       );
     }
 
-    console.log("📂 [STEP 4.1] Loading security tokens...");
-    const certificateRaw = await this.fileManager.readFile(certPath);
-    const secretRaw = await this.fileManager.readFile(secretPath);
-
-    const certificate = certificateRaw.trim();
-    const secret = secretRaw.trim();
+    console.log("📂 [STEP 4.1] Loading security tokens from database...");
+    const certificate = egsUnit.binarySecurityToken.trim();
+    const secret = egsUnit.secret.trim();
 
     console.log(`✅ Certificate Loaded (Length: ${certificate.length})`);
     console.log(`✅ Secret Loaded (Length: ${secret.length})`);
@@ -218,10 +318,7 @@ export class ComplianceService {
     // Robustness: Strip _signed suffix if the user provided it (preventing double suffix)
     const cleanSerialNumber = invoiceSerialNumber.replace(/_signed$/i, "");
 
-    const signedPath = require("path").join(
-      tempDir,
-      `${cleanSerialNumber}_signed.xml`
-    );
+    const signedPath = path.join(tempDir, `${cleanSerialNumber}_signed.xml`);
 
     if (!(await this.fileManager.exists(signedPath))) {
       this.logger.error(`Signed XML not found at: ${signedPath}`);
@@ -287,35 +384,24 @@ export class ComplianceService {
     console.log(`👤 Profile: ${commonName}`);
     console.log(`🔢 Serial: ${invoiceSerialNumber}`);
 
-    // 1. Load Security Tokens
-    const certPath = this.fileManager.getOnboardingFilePath(
-      commonName,
-      "ccsid-certificate.pem"
-    );
-    const secretPath = this.fileManager.getOnboardingFilePath(
-      commonName,
-      "ccsid-secret.txt"
-    );
+    // 1. Load Security Tokens from DB
+    const egsUnit = await this.prisma.egsUnit.findUnique({
+      where: { commonName },
+    });
 
-    if (
-      !(await this.fileManager.exists(certPath)) ||
-      !(await this.fileManager.exists(secretPath))
-    ) {
+    if (!egsUnit || !egsUnit.binarySecurityToken || !egsUnit.secret) {
       throw new NotFoundException(
-        `Security tokens not found for ${commonName}.`
+        `Security tokens not found for ${commonName} in database.`
       );
     }
 
-    const certificate = (await this.fileManager.readFile(certPath)).trim();
-    const secret = (await this.fileManager.readFile(secretPath)).trim();
+    const certificate = egsUnit.binarySecurityToken.trim();
+    const secret = egsUnit.secret.trim();
 
     // 2. Load Signed XML
     const tempDir = await this.fileManager.getTempDir(commonName);
     const cleanSerialNumber = invoiceSerialNumber.replace(/_signed$/i, "");
-    const signedPath = require("path").join(
-      tempDir,
-      `${cleanSerialNumber}_signed.xml`
-    );
+    const signedPath = path.join(tempDir, `${cleanSerialNumber}_signed.xml`);
 
     if (!(await this.fileManager.exists(signedPath))) {
       throw new NotFoundException(
@@ -414,30 +500,28 @@ export class ComplianceService {
       typeCode: typeCodeMatch[1],
     };
   }
-  /**
-   * List all onboarded EGS units (hotels) with detailed info from properties
-   */
   async listOnboardedEgs() {
-    this.logger.log("Listing all onboarded EGS units with extended data...");
-    const dirs = await this.fileManager.listOnboardingDirectories();
-    const egsList = [];
+    this.logger.log("Listing all onboarded EGS units from database...");
 
-    for (const dir of dirs) {
-      const config = await this.fileManager.readOnboardingConfig(dir);
-      if (config["csr.common.name"]) {
-        egsList.push({
-          slug: config["csr.common.name"],
-          organizationName:
-            config["csr.organization.name"] ||
-            dir
-              .split("_")
-              .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-              .join(" "),
-          vatNumber: config["csr.organization.identifier"] || "",
-        });
-      }
-    }
+    const units = await this.prisma.egsUnit.findMany({
+      orderBy: { commonName: "asc" },
+      select: {
+        commonName: true,
+        organizationName: true,
+        organizationIdentifier: true,
+        binarySecurityToken: true,
+        countryName: true,
+        production: true,
+      },
+    });
 
-    return egsList;
+    return units.map((u) => ({
+      slug: u.commonName,
+      organizationName: u.organizationName,
+      vatNumber: u.organizationIdentifier, // ✅ ACTUAL VAT NUMBER
+      status: u.binarySecurityToken ? "Onboarded" : "Pending",
+      country: u.countryName,
+      production: u.production,
+    }));
   }
 }

@@ -104,6 +104,33 @@ model ZatcaSubmission {
   qrCode          String?  @db.Text
   zatcaResponse   Json?
   
-  createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
+
+model EgsUnit {
+  id                        String   @id @default(uuid())
+  commonName                String   @unique
+  serialNumber              String
+  organizationIdentifier    String
+  organizationUnitName      String
+  organizationName          String
+  countryName               String
+  invoiceType               String
+  locationAddress           String
+  industryBusinessCategory  String
+  production                Boolean  @default(false)
+
+  csr                       String   @db.Text
+  privateKey                String   @db.Text
+  onboardingConfig           String?  @db.Text
+
+  binarySecurityToken       String?  @db.Text
+  secret                    String?  @db.Text
+  requestId                 String?
+
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@index([commonName])
+}
+

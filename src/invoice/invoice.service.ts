@@ -11,6 +11,7 @@ import { SignInvoiceDto } from "./dto/sign-invoice.dto";
 import * as path from "path";
 
 import { SequenceService } from "../common/sequence.service";
+import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
 export class InvoiceService {
@@ -20,7 +21,8 @@ export class InvoiceService {
     private readonly cliExecutor: CliExecutorService,
     private readonly fileManager: FileManagerService,
     private readonly xmlTemplate: XmlTemplateService,
-    private readonly sequenceService: SequenceService
+    private readonly sequenceService: SequenceService,
+    private readonly prisma: PrismaService
   ) {}
 
   async signInvoice(dto: SignInvoiceDto) {
@@ -34,31 +36,52 @@ export class InvoiceService {
     invoice.invoiceCounterNumber = seqData.counter;
 
     const serialNumber = invoice.invoiceSerialNumber;
-    const folderName = commonName.toLowerCase().replace(/\s+/g, "_");
 
     console.log("--------------------------------------------------");
     console.log("📑 INVOICE SIGNING: STARTING PROCESS");
     console.log(`📍 Profile: ${commonName}`);
     console.log(`🔢 Serial: ${serialNumber}`);
 
-    // 1. Load Keys and Certificate
-    const keyPath = this.fileManager.getOnboardingFilePath(
-      commonName,
-      "egs-signing-key.pem"
-    );
-    const certPath = this.fileManager.getOnboardingFilePath(
-      commonName,
-      "ccsid-certificate.pem"
-    );
+    // 1. Load Keys and Certificate from DB (EgsUnit)
+    const egsUnit = await this.prisma.egsUnit.findUnique({
+      where: { commonName },
+    });
 
-    if (
-      !(await this.fileManager.exists(keyPath)) ||
-      !(await this.fileManager.exists(certPath))
-    ) {
+    if (!egsUnit || !egsUnit.privateKey || !egsUnit.binarySecurityToken) {
       throw new NotFoundException(
-        `Security tokens (key/cert) not found for ${commonName}. Please onboard first.`
+        `Security tokens (key/cert) not found in database for ${commonName}. Please complete onboarding (steps 1 & 2) first.`
       );
     }
+
+    // Reconstruct PEM-formatted key and certificate from compact DB values
+    const formatPem = (body: string, header: string, footer: string) => {
+      const chunks = body.match(/.{1,64}/g) || [body];
+      return [header, ...chunks, footer, ""].join("\n");
+    };
+
+    const keyPem = formatPem(
+      egsUnit.privateKey.trim(),
+      "-----BEGIN PRIVATE KEY-----",
+      "-----END PRIVATE KEY-----"
+    );
+
+    const certPem = formatPem(
+      egsUnit.binarySecurityToken.trim(),
+      "-----BEGIN CERTIFICATE-----",
+      "-----END CERTIFICATE-----"
+    );
+
+    // Persist to onboarding folder to keep CLI contract unchanged
+    const keyPath = await this.fileManager.writeOnboardingFile(
+      commonName,
+      "egs-signing-key.pem",
+      keyPem
+    );
+    const certPath = await this.fileManager.writeOnboardingFile(
+      commonName,
+      "ccsid-certificate.pem",
+      certPem
+    );
 
     // 2. Generate Base XML
     const baseXml = this.xmlTemplate.generateInvoiceXml(dto);

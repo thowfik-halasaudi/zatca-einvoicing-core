@@ -1,12 +1,12 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { FileManagerService } from "./file-manager.service";
 import { SignInvoiceDto } from "../invoice/dto/sign-invoice.dto";
+import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
 export class SequenceService {
   private readonly logger = new Logger(SequenceService.name);
 
-  constructor(private readonly fileManager: FileManagerService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Generates the next sequential invoice serial number based on the requested type.
@@ -35,43 +35,26 @@ export class SequenceService {
       prefix = isStandard ? "SD" : "SI";
     }
 
-    const counterFile = this.fileManager.getOnboardingFilePath(
-      commonName,
-      "counters.json"
-    );
-    this.logger.log(
-      `🏷️  Loading counters for ${commonName} from: ${counterFile}`
-    );
+    // Sequence Key: [CommonName]-[Prefix]
+    const seriesKey = `${commonName}-${prefix}`;
+    this.logger.log(`🏷️  Loading counters for ${seriesKey} from PostgreSQL...`);
 
-    // Load or Initialize Counters
-    let counters: Record<string, number> = {};
-    if (await this.fileManager.exists(counterFile)) {
-      try {
-        const content = await this.fileManager.readFile(counterFile);
-        counters = JSON.parse(content);
-        this.logger.log(`📈 Current counts: ${JSON.stringify(counters)}`);
-      } catch (e) {
-        this.logger.error(
-          `❌ Failed to parse counters.json for ${commonName}: ${e.message}`
-        );
-      }
-    } else {
-      this.logger.log(`🆕 No counters file found. Starting from zero.`);
-    }
+    // Get and Increment Counter in DB
+    const counterRecord = await this.prisma.invoiceCounter.upsert({
+      where: { seriesKey },
+      update: {
+        lastNumber: { increment: 1 },
+      },
+      create: {
+        seriesKey,
+        lastNumber: 1,
+      },
+    });
 
-    // Increment counter for this specific prefix
-    const currentCount = counters[prefix] || 0;
-    const nextCount = currentCount + 1;
-    counters[prefix] = nextCount;
+    const nextCount = counterRecord.lastNumber;
 
     this.logger.log(
-      `🔢 Incrementing ${prefix}: ${currentCount} -> ${nextCount}`
-    );
-
-    // Save updated counters
-    await this.fileManager.writeFile(
-      counterFile,
-      JSON.stringify(counters, null, 2)
+      `🔢 Incrementing ${seriesKey}: ${nextCount - 1} -> ${nextCount}`
     );
 
     // Pad to 8 digits

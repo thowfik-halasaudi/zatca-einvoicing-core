@@ -4,9 +4,11 @@ import { CommonModule } from "./common/common.module";
 import { ComplianceModule } from "./compliance/compliance.module";
 import { CryptographyModule } from "./cryptography/cryptography.module";
 import { InvoiceModule } from "./invoice/invoice.module";
+import { PrismaModule } from "./prisma/prisma.module";
 
 @Module({
   imports: [
+    PrismaModule,
     ConfigModule.forRoot({
       isGlobal: true,
     }),

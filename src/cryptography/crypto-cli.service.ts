@@ -33,35 +33,35 @@ export class CryptoCliService {
     csrConfigProps: string
   ): Promise<{ privateKey: string; csr: string }> {
     console.log("--------------------------------------------------");
-    console.log("🛠️  FATOORA CLI: STARTING CSR GENERATION");
+    console.log("🛠️  FATOORA CLI: STARTING CSR GENERATION (TEMP)");
     console.log(`📍 Common Name: ${commonName}`);
 
     this.logger.debug(
-      `Generating CSR and Private Key for [${commonName}] via Fatoora CLI`
+      `Generating CSR and Private Key for [${commonName}] via Fatoora CLI (Temp Folder)`
     );
 
-    // Use descriptive filenames for the onboarding process
+    // Use absolute temp directory to avoid path confusion between backend/core
+    const tempOnboardingDir = await this.fileManager.getTempDir(
+      `onboarding_${Date.now()}`
+    );
+
+    // Use descriptive filenames
     const propsFileName = `onboarding-config.properties`;
     const privateKeyName = `egs-signing-key.pem`;
     const csrName = `egs-registration.csr`;
 
-    console.log(
-      `🔹 Step 1: Writing properties file [${propsFileName}] to folder...`
-    );
-    const propsPath = await this.fileManager.writeOnboardingFile(
-      commonName,
-      propsFileName,
-      csrConfigProps
-    );
+    const propsPath = path.join(tempOnboardingDir, propsFileName);
 
-    const onboardingDir = await this.fileManager.getOnboardingDir(commonName);
+    console.log(
+      `🔹 Step 1: Writing properties file [${propsFileName}] to temp folder...`
+    );
+    await fs.writeFile(propsPath, csrConfigProps, "utf-8");
 
     console.log(`✅ Step 1: Configuration saved at ${propsPath}`);
 
     try {
-      // Execute command inside the target directory to ensure files land there
-      // Command: cd <dir> && fatoora -csr -csrConfig <props> -privateKey <out_key> -generatedCsr <out_csr> -pem
-      const command = `cd "${onboardingDir}" && fatoora -csr -csrConfig "${propsFileName}" -privateKey "${privateKeyName}" -generatedCsr "${csrName}" -pem`;
+      // Execute command inside the target directory
+      const command = `cd "${tempOnboardingDir}" && fatoora -csr -csrConfig "${propsFileName}" -privateKey "${privateKeyName}" -generatedCsr "${csrName}" -pem`;
 
       console.log(`🔹 Step 2: Executing Fatoora CLI command...`);
       console.log(`💻 Command: ${command}`);
@@ -72,101 +72,64 @@ export class CryptoCliService {
         console.log(`📝 CLI Output:\n${result.stdout.trim()}`);
       }
 
-      // CHECK FOR SILENT FAILURES: Fatoora CLI returns 0 even on [ERROR]
       const hasErrorInOutput =
         result.stdout && result.stdout.includes("[ERROR]");
 
       if (result.exitCode !== 0 || hasErrorInOutput) {
-        console.log(
-          `❌ Step 2 Failed (Exit Code ${result.exitCode}, Error in Output: ${hasErrorInOutput})`
-        );
-
-        // Extract the error message from stdout if possible
+        console.log(`❌ Step 2 Failed`);
         let errorMsg = result.stderr || "Fatoora CLI failed to generate files.";
         if (hasErrorInOutput) {
           const lines = result.stdout.split("\n");
           const errorLine = lines.find((line) => line.includes("[ERROR]"));
           if (errorLine) {
-            // Extract the part after " - " and remove any wrapping quotes
             const parts = errorLine.split(" - ");
-            if (parts.length > 1) {
-              errorMsg = parts[1].replace(/^"(.*)"$/, "$1").trim();
-            } else {
-              errorMsg = errorLine.split("] ").pop() || errorLine;
-            }
+            errorMsg =
+              parts.length > 1
+                ? parts[1].replace(/^"(.*)"$/, "$1").trim()
+                : errorLine;
           }
         }
-
         throw new BadRequestException(errorMsg);
       }
 
-      console.log(
-        `✅ Step 2: CLI execution successful. CSR and Key generated.`
-      );
+      console.log(`✅ Step 2: CLI execution successful.`);
 
-      console.log(`🔹 Step 3: Reading generated files...`);
+      // Read the generated files
+      const privateKeyPath = path.join(tempOnboardingDir, privateKeyName);
+      const csrPath = path.join(tempOnboardingDir, csrName);
 
-      // List files for diagnostics
-      const filesAfter = await fs.readdir(onboardingDir);
-      console.log(`📂 Files in folder: ${filesAfter.join(", ")}`);
-
-      // Read the private key
-      const privateKeyPath = path.join(onboardingDir, privateKeyName);
-      console.log(`🔍 Checking private key at: ${privateKeyPath}`);
-      if (!(await this.fileManager.exists(privateKeyPath))) {
+      if (
+        !(await this.fileManager.exists(privateKeyPath)) ||
+        !(await this.fileManager.exists(csrPath))
+      ) {
         throw new Error(
-          `Private key file was not created: ${privateKeyPath}. Available: ${filesAfter.join(", ")}`
+          `CLI reported success but files were not found in ${tempOnboardingDir}`
         );
       }
-      let privateKey = await this.fileManager.readFile(privateKeyPath);
 
-      // ALIGNMENT: If the user wants it like hiltongroup, we might need the raw key content without headers
-      // Usually, ZATCA expects the EC private key. hiltongroup had: MIGNAgEAMBAG...
-      // egs-signing-key.pem from CLI has: -----BEGIN EC PRIVATE KEY----- ...
+      let privateKey = await fs.readFile(privateKeyPath, "utf-8");
+      let csr = await fs.readFile(csrPath, "utf-8");
+
+      // Strip PEM headers from Private Key to match format
       if (privateKey.includes("-----BEGIN")) {
-        console.log(
-          "✂️ Stripping PEM headers from Private Key to match hiltongroup format..."
-        );
+        console.log("✂️ Stripping PEM headers from Private Key...");
         privateKey = privateKey
           .replace(/-----BEGIN[^-]+-----/g, "")
           .replace(/-----END[^-]+-----/g, "")
           .replace(/\s+/g, "")
           .trim();
-        // Overwrite the file with the raw version to match hiltongroup exactly
-        await fs.writeFile(privateKeyPath, privateKey, "utf-8");
       }
 
-      // Read the CSR file
-      const csrPath = path.join(onboardingDir, csrName);
-      console.log(`🔍 Checking CSR at: ${csrPath}`);
-      if (!(await this.fileManager.exists(csrPath))) {
-        throw new Error(
-          `CSR file was not created: ${csrPath}. Available: ${filesAfter.join(", ")}`
-        );
-      }
-
-      let csr = await this.fileManager.readFile(csrPath);
-
-      // ENCODING FIX:
-      // The Fatoora CLI output is a raw PEM file (starts with -----BEGIN...).
-      // However, the ZATCA API Step 2 wants the CSR field to be a Base64 string of that PEM content.
-      // So we read the PEM, encode it to Base64 (starts with LS0tLS...), and save that as the final .csr file.
-      // This matches the working 'hiltongroup' example.
-
-      const pemContent = csr; // 'csr' currently holds the raw PEM string
-      const base64Csr = Buffer.from(pemContent).toString("base64");
-
-      // Save the Base64 version
-      await fs.writeFile(csrPath, base64Csr, "utf-8");
-
-      // Update return value
+      // Encode CSR to Base64 (ZATCA expects Base64 of PEM)
+      const base64Csr = Buffer.from(csr).toString("base64");
       csr = base64Csr;
 
-      console.log(
-        `✅ Step 3: Converted PEM to Base64-PEM (starts with ${base64Csr.substring(0, 10)}...)`
-      );
+      console.log(`✅ Step 3: Files read and encoded successfully.`);
 
-      console.log(`✅ Step 3: Files read and aligned successfully.`);
+      // CLEANUP: Remove the entire temp onboarding directory
+      console.log(`🧹 Cleaning up temp folder: ${tempOnboardingDir}`);
+      await fs.rm(tempOnboardingDir, { recursive: true, force: true });
+
       console.log("--------------------------------------------------");
 
       return {
@@ -175,6 +138,10 @@ export class CryptoCliService {
       };
     } catch (error) {
       console.log(`❌ Error during CSR generation: ${error.message}`);
+      // Attempt cleanup even on failure
+      try {
+        await fs.rm(tempOnboardingDir, { recursive: true, force: true });
+      } catch (e) {}
       throw error;
     }
   }

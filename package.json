@@ -17,7 +17,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "db:clean": "ts-node scripts/clean-db.ts"
+    "db:clean": "ts-node scripts/clean-db.ts",
+    "db:clean:model": "ts-node scripts/clean-model.ts"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
@@ -26,7 +27,7 @@
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/swagger": "^7.0.0",
-    "@prisma/client": "^5.0.0",
+    "@prisma/client": "^5.22.0",
     "axios": "^1.13.2",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
