@@ -7,19 +7,11 @@ export class PrismaService
   implements OnModuleInit, OnModuleDestroy
 {
   async onModuleInit() {
-    console.log("--------------------------------------------------");
-    console.log("📡 [PRISMA] CONNECTING TO DATABASE...");
-    console.log(
-      `🌐 URL: ${process.env.DATABASE_URL?.replace(/:([^:@]+)@/, ":****@")}`
-    );
     try {
       await this.$connect();
-      console.log("✅ [PRISMA] DATABASE CONNECTED SUCCESSFULLY.");
     } catch (e) {
-      console.log("❌ [PRISMA] DATABASE CONNECTION FAILED!");
-      console.log(`❗ Error: ${e.message}`);
+      // Handle connection error if needed, or let it crash
     }
-    console.log("--------------------------------------------------");
   }
 
   async onModuleDestroy() {

@@ -21,23 +21,12 @@ export class SequenceService {
     const year = new Date().getFullYear().toString().slice(-2);
 
     // 1. Get the latest invoice for this EGS to find the last hash
-    console.log(`\n[CHAIN] ⛓️  Retrieving last hash for EGS: "${commonName}"`);
+    // 1. Get the latest invoice for this EGS to find the last hash
     const lastInvoice = await this.prisma.invoice.findFirst({
       where: { commonName },
       orderBy: { invoiceNumber: "desc" },
       include: { hash: true },
     });
-
-    if (lastInvoice) {
-      console.log(
-        `[CHAIN] 🔎 Found last invoice: ${lastInvoice.invoiceNumber}`
-      );
-      console.log(
-        `[CHAIN] 🔑 Last Hash in DB: ${lastInvoice.hash?.currentInvoiceHash?.substring(0, 10)}...`
-      );
-    } else {
-      console.log(`[CHAIN] 📭 No previous invoice found for "${commonName}".`);
-    }
 
     const DEFAULT_FIRST_HASH =
       "NWZlY2ViOTZmOTk1YTRiMGNjM2YwOTUwZGYzMmM2YjQ5ZGEyN2IyOA==";
@@ -60,7 +49,6 @@ export class SequenceService {
 
     // 3. Sequence Key: Using commonName to ensure ONE sequence per certificate (ZATCA requirement)
     const seriesKey = commonName;
-    this.logger.log(`🏷️  Loading counter for ${seriesKey} from PostgreSQL...`);
 
     // Get and Increment Counter in DB
     const counterRecord = await this.prisma.invoiceCounter.upsert({
@@ -76,18 +64,11 @@ export class SequenceService {
 
     const nextCount = counterRecord.lastNumber;
 
-    this.logger.log(
-      `🔢 Incrementing ${seriesKey}: ${nextCount - 1} -> ${nextCount}`
-    );
-
     // Pad to 8 digits
     const paddedSeq = nextCount.toString().padStart(8, "0");
 
     // We still use the prefix in the serialNumber string for readability
     const serialNumber = `${hotelCode}-${prefix}-${year}-${paddedSeq}`;
-
-    console.log(`✅ [SEQUENCE] Generated: ${serialNumber} (ICV: ${nextCount})`);
-    console.log(`✅ [SEQUENCE] Prev Hash: ${previousHash.substring(0, 20)}...`);
 
     return { serialNumber, counter: nextCount, previousHash };
   }

@@ -44,8 +44,6 @@ export class ZatcaClientService {
     const baseUrl = production ? this.productionUrl : this.sandboxUrl;
     const url = `${baseUrl}/compliance`;
 
-    this.logger.debug(`Issuing compliance certificate via ZATCA API: ${url}`);
-
     // ZATCA expects a clean base64 string in the 'csr' field.
     let base64Csr = csr.trim();
     if (base64Csr.startsWith("LS0tLS1")) {
@@ -65,15 +63,6 @@ export class ZatcaClientService {
       OTP: otp,
     };
 
-    console.log("--------------------------------------------------");
-    console.log("🚀 SENDING REQUEST TO ZATCA");
-    console.log(`📡 URL: ${url}`);
-    console.log(`🔑 OTP: ${otp}`);
-    console.log(
-      `📦 Payload (CSR first 50 chars): ${payload.csr.substring(0, 50)}...`
-    );
-    console.log("--------------------------------------------------");
-
     try {
       const response = await lastValueFrom(
         this.httpService.post<ComplianceCertificateResponse>(url, payload, {
@@ -82,7 +71,6 @@ export class ZatcaClientService {
       );
 
       const data = response.data;
-      console.log("✅ [ZATCA] Received Successful Response.");
 
       if (
         data.binarySecurityToken &&
@@ -91,17 +79,10 @@ export class ZatcaClientService {
         data.binarySecurityToken = `-----BEGIN CERTIFICATE-----\n${data.binarySecurityToken}\n-----END CERTIFICATE-----`;
       }
 
-      this.logger.log(
-        `Compliance certificate issued successfully. RequestID: ${data.requestID}`
-      );
       return data;
     } catch (error) {
       const axiosError = error as AxiosError;
       const errorData: any = axiosError.response?.data;
-
-      console.log("❌ [ZATCA] API Error Response:");
-      console.log(`Status: ${axiosError.response?.status}`);
-      console.log(`Body: ${JSON.stringify(errorData, null, 2)}`);
 
       let errorMsg = "ZATCA API Error";
       if (errorData?.errors && Array.isArray(errorData.errors)) {
@@ -134,8 +115,6 @@ export class ZatcaClientService {
     const baseUrl = production ? this.productionUrl : this.sandboxUrl;
     const url = `${baseUrl}/compliance/invoices`;
 
-    this.logger.debug(`Checking invoice compliance via ZATCA API: ${url}`);
-
     const strippedCert = certificate
       .replace(/-----(BEGIN|END) CERTIFICATE-----/gi, "")
       .replace(/[\r\n\s]/g, "");
@@ -157,26 +136,15 @@ export class ZatcaClientService {
       invoice: signedXmlBase64,
     };
 
-    console.log("--------------------------------------------------");
-    console.log("🚀 SENDING COMPLIANCE CHECK TO ZATCA");
-    console.log(`📡 URL: ${url}`);
-    console.log(`🆔 UUID: ${uuid}`);
-    console.log("--------------------------------------------------");
-
     try {
       const response = await lastValueFrom(
         this.httpService.post(url, payload, { headers })
       );
 
-      console.log("✅ [ZATCA] Compliance Check Response Received.");
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError;
       const errorData: any = axiosError.response?.data;
-
-      console.log("❌ [ZATCA] Compliance Check Failed!");
-      console.log(`Status: ${axiosError.response?.status}`);
-      console.log(`Body: ${JSON.stringify(errorData, null, 2)}`);
 
       let errorMsg = "Compliance Check Failed";
 
@@ -270,8 +238,6 @@ export class ZatcaClientService {
     certificate: string,
     secret: string
   ): Promise<any> {
-    this.logger.debug(`Submiting to ZATCA ${type}: ${url}`);
-
     const strippedCert = certificate
       .replace(/-----(BEGIN|END) CERTIFICATE-----/gi, "")
       .replace(/[\r\n\s]/g, "");
@@ -292,26 +258,15 @@ export class ZatcaClientService {
       invoice: signedXmlBase64,
     };
 
-    console.log("--------------------------------------------------");
-    console.log(`🚀 [ZATCA] ${type} SUBMISSION`);
-    console.log(`📡 URL: ${url}`);
-    console.log(`🆔 UUID: ${uuid}`);
-    console.log("--------------------------------------------------");
-
     try {
       const response = await lastValueFrom(
         this.httpService.post(url, payload, { headers })
       );
 
-      console.log(`✅ [ZATCA] ${type} Success.`);
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError;
       const errorData: any = axiosError.response?.data;
-
-      console.log(`❌ [ZATCA] ${type} Failed!`);
-      console.log(`Status: ${axiosError.response?.status}`);
-      console.log(`Body: ${JSON.stringify(errorData, null, 2)}`);
 
       let errorMsg = `${type} Submission Failed`;
 

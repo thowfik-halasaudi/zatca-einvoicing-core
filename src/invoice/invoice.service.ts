@@ -32,7 +32,7 @@ export class InvoiceService {
     const commonName = egs.commonName;
 
     // 1. Generate Sequence and Retrieve Chain Data (ICV and PIH)
-    this.logger.log(`Generating automatic sequence for ${commonName}...`);
+    // 1. Generate Sequence and Retrieve Chain Data (ICV and PIH)
     const seqData = await this.sequenceService.generateNextSerialNumber(dto);
 
     invoice.invoiceSerialNumber = seqData.serialNumber;
@@ -40,11 +40,6 @@ export class InvoiceService {
     invoice.previousInvoiceHash = seqData.previousHash;
 
     const serialNumber = invoice.invoiceSerialNumber;
-
-    console.log("--------------------------------------------------");
-    console.log("📑 INVOICE SIGNING: STARTING PROCESS");
-    console.log(`📍 Profile: ${commonName}`);
-    console.log(`🔢 Serial: ${serialNumber}`);
 
     // 1. Load Keys and Certificate from DB (EgsUnit)
     const egsUnit = await this.prisma.egsUnit.findUnique({
@@ -90,11 +85,6 @@ export class InvoiceService {
     // 2. Generate Base XML
     const baseXml = this.xmlTemplate.generateInvoiceXml(dto);
 
-    console.log("\n[PRE-SIGN] 📄 Generated Base XML Structure:");
-    console.log("--------------------------------------------------");
-    console.log(baseXml);
-    console.log("--------------------------------------------------");
-
     const unsignedPath = await this.fileManager.writeTempFile(
       commonName,
       `${serialNumber}_unsigned.xml`,
@@ -103,17 +93,11 @@ export class InvoiceService {
     const tempDir = await this.fileManager.getTempDir(commonName);
     const signedPath = path.join(tempDir, `${serialNumber}_signed.xml`);
 
-    console.log(`✅ Base XML generated at: ${unsignedPath}`);
-
     // 3. Call Fatoora CLI to Sign
-    console.log("🚀 Calling Fatoora CLI to sign invoice...");
 
     try {
       const command = `fatoora -sign -invoice "${unsignedPath}" -key "${keyPath}" -cert "${certPath}" -signedInvoice "${signedPath}"`;
       const output = await this.cliExecutor.execute(command);
-
-      console.log("✅ Fatoora CLI Signing Output:");
-      console.log(output);
 
       if (!(await this.fileManager.exists(signedPath))) {
         throw new Error(
@@ -123,15 +107,6 @@ export class InvoiceService {
 
       const signedXml = await this.fileManager.readFile(signedPath);
 
-      console.log(
-        "\n[POST-SIGN] 📝 Final Signed XML Structure (ZATCA Compliant):"
-      );
-      console.log("--------------------------------------------------");
-      console.log(signedXml);
-      console.log("--------------------------------------------------");
-
-      console.log("🎉 SUCCESS: Invoice signed successfully.");
-
       // Extract QR code from signed XML for the frontend
       const qrMatch = signedXml.match(
         /<cac:AdditionalDocumentReference>\s*<cbc:ID>QR<\/cbc:ID>\s*<cac:Attachment>\s*<cbc:EmbeddedDocumentBinaryObject[^>]*>([^<]+)<\/cbc:EmbeddedDocumentBinaryObject>/i
@@ -139,12 +114,6 @@ export class InvoiceService {
       const qrCode = qrMatch ? qrMatch[1].trim() : undefined;
 
       // 4. PERSIST INVOICE TO DATABASE
-      console.log(
-        "\n🔥🔥🔥 CRITICAL: ABOUT TO CALL persistInvoiceToDatabase 🔥🔥🔥"
-      );
-      console.log(
-        `📌 Serial: ${serialNumber} | QR Length: ${qrCode?.length || 0} | XML Length: ${signedXml.length}`
-      );
 
       const savedInvoice = await this.persistInvoiceToDatabase(
         dto,
@@ -153,13 +122,7 @@ export class InvoiceService {
         serialNumber
       );
 
-      console.log("✅✅✅ DATABASE PERSISTENCE COMPLETED!");
-      console.log(
-        `💾 Saved Invoice ID: ${savedInvoice.id} | UUID: ${savedInvoice.uuid}`
-      );
-
       // 6. SUBMIT TO ZATCA (AUTO-TRIGGER)
-      console.log("\n🚀 AUTOMATED ZATCA SUBMISSION TRIGGERED...");
       let submissionStatus = "PENDING_SUBMISSION";
       let submissionResult = null;
 
@@ -170,7 +133,6 @@ export class InvoiceService {
           production: dto.egs.production || false,
         });
         submissionStatus = "SUBMITTED";
-        console.log(`✅ [ZATCA] Auto-Submission Successful.`);
       } catch (submitError) {
         console.error(
           `❌ [ZATCA] Auto-Submission Failed: ${submitError.message}`
@@ -198,7 +160,6 @@ export class InvoiceService {
         if (signedPath && (await this.fileManager.exists(signedPath))) {
           await this.fileManager.deleteTemp(signedPath);
         }
-        console.log("🧹 CLEANUP: Temporary CLI files removed.");
       } catch (cleanupError) {
         console.warn(`⚠️ CLEANUP FAILED: ${cleanupError.message}`);
       }
@@ -269,22 +230,15 @@ export class InvoiceService {
     qrCode: string | undefined,
     serialNumber: string
   ) {
-    console.log("\n╔═══════════════════════════════════════════════════════╗");
-    console.log("║   💾 DATABASE PERSISTENCE STARTING                   ║");
-    console.log("║   🎯 EXTRACTING CLI-GENERATED DATA FROM XML          ║");
-    console.log("╚═══════════════════════════════════════════════════════╝");
-
     const { egs, invoice, supplier, customer, lineItems, totals } = dto;
 
     // =====================================================
     // EXTRACT DATA FROM CLI-GENERATED SIGNED XML
     // =====================================================
-    console.log("\n[INVOICE-DB] 🔍 Parsing CLI-generated signed XML...");
 
     // Extract UUID (generated by Fatoora CLI)
     const uuidMatch = signedXml.match(/<cbc:UUID>([^<]+)<\/cbc:UUID>/);
     const cliGeneratedUuid = uuidMatch ? uuidMatch[1].trim() : null;
-    console.log(`[INVOICE-DB]    ✓ CLI UUID: ${cliGeneratedUuid}`);
 
     // Extract Issue Date/Time (generated by Fatoora CLI)
     const issueDateMatch = signedXml.match(
@@ -299,13 +253,6 @@ export class InvoiceService {
       const dateStr = issueDateMatch[1].trim();
       const timeStr = issueTimeMatch[1].trim();
       cliIssueDateTime = new Date(`${dateStr}T${timeStr}`);
-      console.log(
-        `[INVOICE-DB]    ✓ CLI IssueDateTime: ${cliIssueDateTime.toISOString()}`
-      );
-    } else {
-      console.log(
-        `[INVOICE-DB]    ⚠ CLI IssueDateTime not found in XML, using current time`
-      );
     }
 
     // Extract Invoice Hash (PIH - Previous Invoice Hash from XML)
@@ -315,9 +262,6 @@ export class InvoiceService {
     const previousInvoiceHash = pihMatch
       ? pihMatch[1].trim()
       : "NWZlY2ViOTZmOTk1YTRiMGNjM2YwOTUwZGYzMmM2YjQ5ZGEyN2IyOA==";
-    console.log(
-      `[INVOICE-DB]    ✓ Previous Hash (PIH): ${previousInvoiceHash.substring(0, 20)}...`
-    );
 
     // Extract Invoice Counter (ICV) from XML
     const icvMatch = signedXml.match(
@@ -326,7 +270,6 @@ export class InvoiceService {
     const invoiceCounter = icvMatch
       ? icvMatch[1].trim()
       : invoice.invoiceCounterNumber?.toString() || "1";
-    console.log(`[INVOICE-DB]    ✓ Invoice Counter (ICV): ${invoiceCounter}`);
 
     // Extract Actual Invoice Hash (Digest Value for ZATCA)
     // Must be the digest of the info being signed (Reference URI="")
@@ -338,10 +281,8 @@ export class InvoiceService {
     const currentInvoiceHash = invoiceHashMatch
       ? invoiceHashMatch[1].trim()
       : "HASH_NOT_FOUND";
-    console.log(`[INVOICE-DB]    ✓ Actual Invoice Hash: ${currentInvoiceHash}`);
 
     if (currentInvoiceHash === "HASH_NOT_FOUND") {
-      console.warn("⚠️ WARNING: Could not extract Invoice Hash from XML!");
       // Fallback: If regex fails, we might rely on the PIH? No, that's previous.
     }
 
@@ -357,42 +298,14 @@ export class InvoiceService {
     const invoiceTypeLabel =
       invoiceTypeMap[invoice.invoiceTypeCode] || "UNKNOWN";
 
-    console.log(`\n[INVOICE-DB] 📊 Invoice Details:`);
-    console.log(
-      `[INVOICE-DB]    Type: ${invoiceTypeLabel} (${invoice.invoiceTypeCode})`
-    );
-    console.log(`[INVOICE-DB]    Serial: ${serialNumber}`);
-    console.log(`[INVOICE-DB]    EGS: ${egs.commonName}`);
-    console.log(
-      `[INVOICE-DB]    Total: ${totals.taxInclusiveTotal.toLocaleString()} SAR`
-    );
-    console.log(`[INVOICE-DB]    Items: ${lineItems.length}`);
-    console.log(
-      `[INVOICE-DB]    Category: ${customer?.type === "B2B" ? "STANDARD" : "SIMPLIFIED"}`
-    );
-
     if (!cliGeneratedUuid) {
-      console.error(
-        "[INVOICE-DB] ❌ CRITICAL: UUID not found in CLI-generated XML!"
-      );
       throw new BadRequestException(
         "Failed to extract UUID from signed XML. CLI may have failed."
       );
     }
 
     try {
-      console.log(`\n[INVOICE-DB] 🔨 Creating Invoice Record...`);
-      console.log(`[INVOICE-DB] 🔍 Data to insert:`, {
-        invoiceNumber: serialNumber,
-        uuid: cliGeneratedUuid,
-        invoiceTypeCode: invoice.invoiceTypeCode,
-        commonName: egs.commonName,
-        sellerName: supplier.registrationName,
-        totalAmount: totals.taxInclusiveTotal,
-      });
-
       // Step 1: Create main Invoice record using CLI-extracted data
-      console.log(`[INVOICE-DB] ⏳ Calling prisma.invoice.create...`);
       const createdInvoice = await this.prisma.invoice.create({
         data: {
           invoiceNumber: serialNumber,
@@ -441,25 +354,9 @@ export class InvoiceService {
         },
       });
 
-      console.log(`[INVOICE-DB] ✅ Invoice Record Created!`);
-      console.log(`[INVOICE-DB]    DB ID: ${createdInvoice.id}`);
-      console.log(`[INVOICE-DB]    UUID: ${createdInvoice.uuid}`);
-      console.log(
-        `[INVOICE-DB]    Issue Date: ${createdInvoice.issueDateTime.toISOString()}`
-      );
-
       // Step 2: Create Invoice Items (from request DTO)
-      console.log(`\n[INVOICE-DB] 📦 Creating Line Items...`);
-
+      // Step 2: Create Line Items
       const itemsData = lineItems.map((item, index) => {
-        console.log(`[INVOICE-DB]    Item ${index + 1}: ${item.description}`);
-        console.log(
-          `[INVOICE-DB]       Qty: ${item.quantity} x ${item.unitPrice} SAR = ${item.taxExclusiveAmount} SAR`
-        );
-        console.log(
-          `[INVOICE-DB]       VAT: ${item.vatPercent}% = ${item.vatAmount} SAR`
-        );
-
         return {
           invoiceId: createdInvoice.id,
           description: item.description,
@@ -475,13 +372,7 @@ export class InvoiceService {
         data: itemsData,
       });
 
-      console.log(
-        `[INVOICE-DB] ✅ Line Items Persisted (${lineItems.length} items)`
-      );
-
       // Step 3: Create Invoice Hash Record (using CLI-extracted hash)
-      console.log(`\n[INVOICE-DB] 🔐 Creating Hash Chain Record...`);
-
       await this.prisma.invoiceHash.create({
         data: {
           invoiceId: createdInvoice.id,
@@ -490,14 +381,8 @@ export class InvoiceService {
         },
       });
 
-      console.log(`[INVOICE-DB] ✅ Hash Record Created`);
-      console.log(
-        `[INVOICE-DB]    Chain: ...${previousInvoiceHash.substring(0, 10)} -> ${createdInvoice.uuid.substring(0, 10)}...`
-      );
-
       // Step 4: Initialize ZATCA Submission Record
-      console.log(`\n[INVOICE-DB] 📤 Initializing ZATCA Submission Record...`);
-
+      // Step 4: Initialize ZATCA Submission Record
       const submissionType =
         customer?.type === "B2B" ? "CLEARANCE" : "REPORTING";
 
@@ -512,33 +397,8 @@ export class InvoiceService {
         },
       });
 
-      console.log(`[INVOICE-DB] ✅ Submission Record Initialized`);
-      console.log(`[INVOICE-DB]    Type: ${submissionType}`);
-      console.log(`[INVOICE-DB]    Status: PENDING`);
-
-      console.log(
-        "\n╔═══════════════════════════════════════════════════════╗"
-      );
-      console.log("║   🎉 DATABASE PERSISTENCE COMPLETE!                  ║");
-      console.log(
-        "╚═══════════════════════════════════════════════════════╝\n"
-      );
-
-      console.log(`[INVOICE-DB] 📊 Final Summary:`);
-      console.log(`[INVOICE-DB]    ✓ Invoice: ${createdInvoice.invoiceNumber}`);
-      console.log(`[INVOICE-DB]    ✓ UUID (CLI): ${createdInvoice.uuid}`);
-      console.log(`[INVOICE-DB]    ✓ Items: ${lineItems.length}`);
-      console.log(`[INVOICE-DB]    ✓ Total: ${totals.taxInclusiveTotal} SAR`);
-      console.log(`[INVOICE-DB]    ✓ Hash Chain: Updated (CLI PIH)`);
-      console.log(`[INVOICE-DB]    ✓ ZATCA: Ready for ${submissionType}`);
-      console.log(`[INVOICE-DB]    ✓ XML File: ${serialNumber}_signed.xml`);
-
       return createdInvoice;
     } catch (error) {
-      console.error("\n❌ [INVOICE-DB] DATABASE PERSISTENCE FAILED!");
-      console.error(`[INVOICE-DB] Error: ${error.message}`);
-      console.error(`[INVOICE-DB] Stack: ${error.stack}`);
-
       this.logger.error(
         `Failed to persist invoice to database: ${error.message}`
       );

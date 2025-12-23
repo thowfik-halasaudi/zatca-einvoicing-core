@@ -27,7 +27,6 @@ export class FileManagerService implements OnModuleInit {
   private async ensureDir(dirPath: string): Promise<void> {
     try {
       await fs.mkdir(dirPath, { recursive: true, mode: 0o775 });
-      this.logger.log(`Directory ensured: ${dirPath}`);
     } catch (error: any) {
       if (error.code !== "EEXIST") {
         this.logger.warn(
@@ -55,7 +54,7 @@ export class FileManagerService implements OnModuleInit {
 
     try {
       await fs.writeFile(filePath, content, "utf-8");
-      this.logger.debug(`Temporary file created: ${filename}`);
+
       return filePath;
     } catch (error: any) {
       this.logger.error(
@@ -106,7 +105,6 @@ export class FileManagerService implements OnModuleInit {
   async deleteTemp(filePath: string): Promise<void> {
     try {
       await fs.unlink(filePath);
-      this.logger.debug(`Temporary file deleted: ${path.basename(filePath)}`);
     } catch (error: any) {
       // Don't throw - file might not exist, which is acceptable
       if (error.code !== "ENOENT") {

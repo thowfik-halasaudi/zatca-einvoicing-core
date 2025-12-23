@@ -43,16 +43,12 @@ export class CliExecutorService {
   async execute(command: string, timeout?: number): Promise<CliResult> {
     const executionTimeout = timeout || this.defaultTimeout;
 
-    this.logger.debug(`Executing CLI command: ${this.sanitizeForLog(command)}`);
-
     try {
       const { stdout, stderr } = await execAsync(command, {
         timeout: executionTimeout,
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
         shell: "/bin/sh", // Consistent shell across environments
       });
-
-      this.logger.debug(`CLI command completed successfully`);
 
       return {
         stdout: stdout.trim(),

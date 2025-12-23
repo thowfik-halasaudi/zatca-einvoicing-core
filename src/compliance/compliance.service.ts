@@ -44,12 +44,6 @@ export class ComplianceService {
    * The generated data are saved directly to PostgreSQL.
    */
   async onboardEgs(dto: OnboardEgsDto) {
-    console.log("==================================================");
-    console.log("🚀 STARTING KEY & CSR GENERATION (STEP 1 ONLY)");
-    console.log(`📅 Timestamp: ${new Date().toISOString()}`);
-    console.log(`👤 Target: ${dto.commonName}`);
-    console.log("==================================================");
-
     /**
      * ==================================================
      * 1️⃣ HARD VALIDATION (DO NOT SKIP)
@@ -81,9 +75,6 @@ export class ComplianceService {
     });
 
     if (existingUnit) {
-      this.logger.warn(
-        `Attempt to re-onboard existing unit: ${dto.commonName}`
-      );
       throw new BadRequestException(
         `Unit with Common Name "${dto.commonName}" already exists. To re-onboard, please delete the existing record first or use a different name.`
       );
@@ -94,7 +85,7 @@ export class ComplianceService {
      * 2️⃣ BUILD CSR CONFIG
      * ==================================================
      */
-    console.log("🛠️ [STEP 1.1] Building CSR configuration...");
+
     const csrConfig = this.cryptoCli.buildCSRConfig({
       ...dto,
       production: Boolean(dto.production),
@@ -105,7 +96,7 @@ export class ComplianceService {
      * 3️⃣ GENERATE CSR + PRIVATE KEY (FATOORA CLI)
      * ==================================================
      */
-    console.log("🛠️ [STEP 1.2] Generating Keys and CSR using Fatoora CLI...");
+
     const { privateKey, csr } = await this.cryptoCli.generateOnboardingData(
       dto.commonName,
       csrConfig
@@ -141,20 +132,12 @@ export class ComplianceService {
      * 5️⃣ STORE IN DATABASE
      * ==================================================
      */
-    console.log("--------------------------------------------------");
-    console.log("📂 [DB AUDIT] SAVING NEW EGS UNIT");
-    console.log(`🆔 Common Name: ${dto.commonName}`);
-    console.log("--------------------------------------------------");
 
     try {
       await this.prisma.egsUnit.create({
         data: createData,
       });
-
-      console.log("✅ [DB AUDIT] CREATE SUCCESSFUL");
     } catch (e) {
-      console.error("❌ [DB AUDIT] UPSERT FAILED");
-      console.error(e.message);
       throw e;
     }
 
@@ -163,7 +146,6 @@ export class ComplianceService {
      * 6️⃣ FINAL RESPONSE
      * ==================================================
      */
-    console.log("\n✅ STEP 1 COMPLETE: Keys and CSR generated & stored");
 
     return {
       csr,
@@ -183,29 +165,21 @@ export class ComplianceService {
    * to ZATCA. The resulting CSID is what allows the system to sign and report invoices.
    */
   async issueCsid(dto: IssueCsidDto) {
-    console.log("\n[STEP 2 ONLY] 🚀 STARTING INDEPENDENT CSID ISSUANCE...");
-    console.log(`👤 Targeted Common Name: ${dto.commonName}`);
-    console.log(`🔑 Provided OTP: ${dto.otp}`);
-
     const egsUnit = await this.prisma.egsUnit.findUnique({
       where: { commonName: dto.commonName },
     });
 
     if (!egsUnit || !egsUnit.csr) {
-      console.log("❌ ERROR: CSR data not found in database.");
       throw new NotFoundException(
         `Onboarding data (CSR) not found for ${dto.commonName} in database. Please run Step 1 (onboard) first.`
       );
     }
 
-    console.log("✅ CSR record found in DB. Loading content...");
     const csr = egsUnit.csr;
     const privateKey = egsUnit.privateKey;
-    console.log("✅ CSR and Private Key loaded successfully from database.");
 
     // We don't have the private key string here easily if it's only on disk,
     // but we return what we get from the API
-    console.log("🚀 [STEP 2.2] Calling ZATCA to issue certificate...");
     return this.finishOnboarding(
       dto.commonName,
       csr,
@@ -228,25 +202,11 @@ export class ComplianceService {
     production: boolean,
     privateKey?: string
   ) {
-    console.log("\n[API CALL] 🚀 Triggering ZATCA Compliance API...");
-    console.log(
-      `🌐 Target Environment: ${production ? "PRODUCTION" : "SANDBOX"}`
-    );
-
     const issuedData = await this.zatcaClient.issueComplianceCertificate(
       csr,
       otp,
       production
     );
-
-    console.log("✅ [API CALL] Response received from ZATCA.");
-    console.log(`🆔 RequestID: ${issuedData.requestID}`);
-
-    // Persist the certificate and secret to DB
-    console.log("--------------------------------------------------");
-    console.log("📂 [DB AUDIT] UPDATING SECURITY TOKENS");
-    console.log(`🆔 Target Common Name: ${commonName}`);
-    console.log("--------------------------------------------------");
 
     try {
       await this.prisma.egsUnit.update({
@@ -257,21 +217,9 @@ export class ComplianceService {
           requestId: issuedData.requestID?.toString(),
         },
       });
-      console.log("✅ [DB AUDIT] UPDATE SUCCESSFUL.");
     } catch (e) {
-      console.log("❌ [DB AUDIT] UPDATE FAILED!");
-      console.log(`❗ Error Detail: ${e.message}`);
       throw e;
     }
-
-    console.log(
-      "✅ [STORAGE] Certificate and Secret saved to database successfully."
-    );
-
-    console.log("\n==================================================");
-    console.log("🎉 SUCCESS: ONBOARDING PROCESS FINISHED");
-    console.log("💾 Data stored securely in PostgreSQL.");
-    console.log("==================================================\n");
 
     return {
       privateKey,
@@ -290,9 +238,6 @@ export class ComplianceService {
    */
   async checkInvoiceCompliance(dto: CheckComplianceDto) {
     const { commonName, invoiceSerialNumber } = dto;
-    console.log("\n[STEP 4] 🛡️ STARTING COMPLIANCE CHECK...");
-    console.log(`👤 Profile: ${commonName}`);
-    console.log(`🔢 Serial: ${invoiceSerialNumber}`);
 
     // 1. Load Invoice from Database
     const invoice = await this.prisma.invoice.findUnique({
@@ -338,9 +283,6 @@ export class ComplianceService {
       );
     }
 
-    console.log(`🆔 UUID: ${uuid}`);
-    console.log(`📦 Hash: ${invoiceHash}`);
-
     // 4. Call ZATCA API
     const signedXmlBase64 = Buffer.from(invoice.signedXml).toString("base64");
 
@@ -382,10 +324,6 @@ export class ComplianceService {
     const { commonName, invoiceSerialNumber, production } = dto;
     const isProduction = !!production;
 
-    console.log("\n[SUBMISSION] 🚀 STARTING ZATCA SUBMISSION...");
-    console.log(`👤 Profile: ${commonName}`);
-    console.log(`🔢 Serial: ${invoiceSerialNumber}`);
-
     // 1. Load Invoice
     const invoice = await this.prisma.invoice.findUnique({
       where: { invoiceNumber: invoiceSerialNumber },
@@ -417,10 +355,6 @@ export class ComplianceService {
     // ZATCA Rule: 01xxxx is Standard (Clearance), 02xxxx is Simplified (Reporting)
     const isStandard = invoice.invoiceTypeCodeName.startsWith("01");
     const submissionType = isStandard ? "CLEARANCE" : "REPORTING";
-
-    console.log(
-      `📍 Detected Type: ${isStandard ? "STANDARD (B2B)" : "SIMPLIFIED (B2C)"}`
-    );
 
     const signedXmlBase64 = Buffer.from(invoice.signedXml).toString("base64");
 
@@ -484,10 +418,6 @@ export class ComplianceService {
     ) {
       overallStatus = isStandard ? "CLEARED" : "REPORTED";
     }
-
-    console.log(
-      `[PERSISTENCE] 📊 Syncing Status: ${overallStatus} | Type: ${submissionType}`
-    );
 
     await this.prisma.$transaction([
       this.prisma.zatcaSubmission.upsert({
@@ -559,8 +489,6 @@ export class ComplianceService {
     };
   }
   async listOnboardedEgs() {
-    this.logger.log("Listing all onboarded EGS units from database...");
-
     const units = await this.prisma.egsUnit.findMany({
       orderBy: { commonName: "asc" },
       select: {

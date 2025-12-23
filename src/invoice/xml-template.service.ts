@@ -9,8 +9,6 @@ export class XmlTemplateService {
    * Supports Standard/Simplified and Invoice/Credit/Debit scenarios.
    */
   generateInvoiceXml(dto: SignInvoiceDto): string {
-    console.log("\n[XML GEN] 🏗️  Building Base UBL 2.1 XML from PMS Data...");
-
     const { egs, invoice, supplier, customer, lineItems, totals } = dto;
 
     // ZATCA Rule: For the first invoice (ICV 1), use the hash of '0'
@@ -19,7 +17,7 @@ export class XmlTemplateService {
     const finalPreviousHash = invoice.previousInvoiceHash || DEFAULT_FIRST_HASH;
 
     if (invoice.invoiceCounterNumber === 1 && !invoice.previousInvoiceHash) {
-      console.log("ℹ️  ICV is 1. Automatically using Initial Invoice Hash.");
+      // Automatic initial hash usage logic
     }
 
     // Auto-Time calculation
@@ -31,11 +29,6 @@ export class XmlTemplateService {
     const isStandard = invoice.invoiceTypeCodeName?.startsWith("01") || false;
     const isNote =
       invoice.invoiceTypeCode === "381" || invoice.invoiceTypeCode === "383";
-
-    console.log(
-      `📍 Type: ${isStandard ? "STANDARD" : "SIMPLIFIED"} | Code: ${invoice.invoiceTypeCode || "388"}`
-    );
-    console.log(`📍 Line Items to process: ${lineItems.length}`);
 
     const lineItemsXml = lineItems
       .map((item, index) => {
@@ -289,7 +282,6 @@ export class XmlTemplateService {
     </cac:LegalMonetaryTotal>${lineItemsXml}
 </Invoice>`;
 
-    console.log("✅ [XML GEN] Base XML structure assembled.");
     return xml;
   }
 }

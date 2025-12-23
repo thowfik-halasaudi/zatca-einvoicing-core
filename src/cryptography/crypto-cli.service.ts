@@ -32,14 +32,6 @@ export class CryptoCliService {
     commonName: string,
     csrConfigProps: string
   ): Promise<{ privateKey: string; csr: string }> {
-    console.log("--------------------------------------------------");
-    console.log("🛠️  FATOORA CLI: STARTING CSR GENERATION (TEMP)");
-    console.log(`📍 Common Name: ${commonName}`);
-
-    this.logger.debug(
-      `Generating CSR and Private Key for [${commonName}] via Fatoora CLI (Temp Folder)`
-    );
-
     // Use absolute temp directory to avoid path confusion between backend/core
     const tempOnboardingDir = await this.fileManager.getTempDir(
       `onboarding_${Date.now()}`
@@ -52,31 +44,18 @@ export class CryptoCliService {
 
     const propsPath = path.join(tempOnboardingDir, propsFileName);
 
-    console.log(
-      `🔹 Step 1: Writing properties file [${propsFileName}] to temp folder...`
-    );
     await fs.writeFile(propsPath, csrConfigProps, "utf-8");
-
-    console.log(`✅ Step 1: Configuration saved at ${propsPath}`);
 
     try {
       // Execute command inside the target directory
       const command = `cd "${tempOnboardingDir}" && fatoora -csr -csrConfig "${propsFileName}" -privateKey "${privateKeyName}" -generatedCsr "${csrName}" -pem`;
 
-      console.log(`🔹 Step 2: Executing Fatoora CLI command...`);
-      console.log(`💻 Command: ${command}`);
-
       const result = await this.cliExecutor.execute(command);
-
-      if (result.stdout) {
-        console.log(`📝 CLI Output:\n${result.stdout.trim()}`);
-      }
 
       const hasErrorInOutput =
         result.stdout && result.stdout.includes("[ERROR]");
 
       if (result.exitCode !== 0 || hasErrorInOutput) {
-        console.log(`❌ Step 2 Failed`);
         let errorMsg = result.stderr || "Fatoora CLI failed to generate files.";
         if (hasErrorInOutput) {
           const lines = result.stdout.split("\n");
@@ -91,8 +70,6 @@ export class CryptoCliService {
         }
         throw new BadRequestException(errorMsg);
       }
-
-      console.log(`✅ Step 2: CLI execution successful.`);
 
       // Read the generated files
       const privateKeyPath = path.join(tempOnboardingDir, privateKeyName);
@@ -112,7 +89,6 @@ export class CryptoCliService {
 
       // Strip PEM headers from Private Key to match format
       if (privateKey.includes("-----BEGIN")) {
-        console.log("✂️ Stripping PEM headers from Private Key...");
         privateKey = privateKey
           .replace(/-----BEGIN[^-]+-----/g, "")
           .replace(/-----END[^-]+-----/g, "")
@@ -124,20 +100,14 @@ export class CryptoCliService {
       const base64Csr = Buffer.from(csr).toString("base64");
       csr = base64Csr;
 
-      console.log(`✅ Step 3: Files read and encoded successfully.`);
-
       // CLEANUP: Remove the entire temp onboarding directory
-      console.log(`🧹 Cleaning up temp folder: ${tempOnboardingDir}`);
       await fs.rm(tempOnboardingDir, { recursive: true, force: true });
-
-      console.log("--------------------------------------------------");
 
       return {
         privateKey: privateKey,
         csr: csr,
       };
     } catch (error) {
-      console.log(`❌ Error during CSR generation: ${error.message}`);
       // Attempt cleanup even on failure
       try {
         await fs.rm(tempOnboardingDir, { recursive: true, force: true });
@@ -158,10 +128,6 @@ export class CryptoCliService {
     industryBusinessCategory: string;
     production: boolean;
   }): string {
-    this.logger.debug(
-      "Building CSR configuration (Properties format for Fatoora CLI)"
-    );
-
     // Fatoora CLI requires .properties format
     // Key names must exactly match ZATCA sample properties
     return [
