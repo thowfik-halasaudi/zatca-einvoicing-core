@@ -14,11 +14,11 @@
         font-family: "Arial", sans-serif;
         font-size: 9pt;
         color: #000;
-        line-height: 1.3;
+        line-height: 1.35;
       }
       .container {
         width: 100%;
-        border: 2px solid #ccc; /* Outer border */
+        border: 2px solid #ccc;
         padding: 10px;
         border-radius: 5px;
       }
@@ -27,10 +27,7 @@
         font-size: 14pt;
         font-weight: bold;
         margin-bottom: 20px;
-        text-transform: capitalize;
       }
-
-      /* Top Header Grid */
       .header-grid {
         display: flex;
         justify-content: space-between;
@@ -44,20 +41,17 @@
         width: 30%;
         text-align: center;
       }
-
       .header-field {
-        margin-bottom: 5px;
+        margin-bottom: 6px;
       }
-      .header-label-en {
-        font-weight: bold;
-        display: block;
-        font-size: 8pt;
-      }
+      .header-label-en,
       .header-label-ar {
         font-weight: bold;
-        display: block;
-        text-align: right;
         font-size: 8pt;
+        display: block;
+      }
+      .header-label-ar {
+        text-align: right;
         direction: rtl;
       }
       .header-value {
@@ -67,16 +61,13 @@
       .header-value.rtl {
         text-align: right;
       }
-
       .qr-code {
         width: 120px;
         height: 120px;
       }
-
-      /* Section Styling */
       .section-container {
         border: 1px solid #e0e0e0;
-        border-radius: 8px; /* Rounded corners for section */
+        border-radius: 8px;
         padding: 15px;
         margin-bottom: 15px;
       }
@@ -87,8 +78,6 @@
         font-size: 9pt;
         margin-bottom: 10px;
       }
-
-      /* Form Row Layout */
       .row {
         display: flex;
         gap: 10px;
@@ -97,99 +86,89 @@
       .col {
         flex: 1;
       }
-
-      .form-field {
-        width: 100%;
-      }
-
-      /* Split label and value styling */
-      .field-label-en {
-        font-size: 7pt;
-        color: #333;
-        font-weight: bold;
-        margin-bottom: 2px;
-      }
+      .field-label-en,
       .field-label-ar {
         font-size: 7pt;
-        color: #333;
         font-weight: bold;
-        margin-bottom: 2px;
+        margin-bottom: 3px;
+      }
+      .field-label-ar {
         text-align: right;
         direction: rtl;
       }
-      .field-value-box-en {
-        background-color: #f9f9f9;
-        border: 1px solid #ddd;
-        padding: 6px 8px;
-        min-height: 25px;
-        font-size: 8pt;
-        border-radius: 3px;
-      }
+      .field-value-box-en,
       .field-value-box-ar {
         background-color: #f9f9f9;
         border: 1px solid #ddd;
-        padding: 6px 8px;
-        min-height: 25px;
-        font-size: 8pt;
+        padding: 7px 9px;
+        min-height: 26px;
+        font-size: 8.5pt;
         border-radius: 3px;
+        font-weight: 600;
+      }
+      .field-value-box-ar {
         text-align: right;
         direction: rtl;
       }
-
-      /* Items Section Container (Specific to new request) */
       .items-section-container {
         border: 1px solid #ddd;
         border-radius: 8px;
         padding: 15px;
         margin-top: 20px;
       }
-
       .items-header-bar {
         display: flex;
         justify-content: space-between;
         font-weight: bold;
         font-size: 9pt;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
       }
-
-      /* Table */
       .items-table {
         width: 100%;
         border-collapse: collapse;
         font-size: 9pt;
       }
       .items-table th {
-        padding: 10px;
+        padding: 12px 10px;
         text-align: center;
         font-weight: bold;
+        font-size: 8.5pt;
+        line-height: 1.35;
         border-bottom: 1px solid #ddd;
-        vertical-align: top;
-        background-color: transparent; /* Updated to match image, seems white */
+        vertical-align: bottom;
       }
       .items-table td {
-        padding: 15px 10px;
+        padding: 16px 10px;
         text-align: center;
         border-bottom: 1px solid #ddd;
         vertical-align: middle;
-        font-weight: bold;
+        font-weight: 600;
+        font-size: 9pt;
+        line-height: 1.4;
       }
       .items-table td.desc {
         text-align: center;
       }
+      .items-table td.desc div:first-child {
+        font-weight: bold;
+        font-size: 9pt;
+        margin-bottom: 4px;
+      }
+      .items-table td.desc div:last-child {
+        font-weight: bold;
+        font-size: 8.5pt;
+      }
       .items-table tr:last-child td {
         border-bottom: none;
       }
-
-      /* Totals Block (New Design) */
       .totals-block {
-        width: 100%; /* Image shows it taking full width or nice blocks */
+        width: 100%;
         margin-top: 20px;
-        /* Using a grid or flex column structure */
         display: flex;
         flex-direction: column;
         border: 1px solid #ddd;
         border-radius: 8px;
-        overflow: hidden; /* For rounded corners on children */
+        overflow: hidden;
       }
       .total-row {
         display: flex;
@@ -199,9 +178,8 @@
       .total-row:last-child {
         border-bottom: none;
       }
-
       .total-label-cell {
-        flex: 2; /* Takes more space */
+        flex: 2;
         background-color: #fcfcfc;
         padding: 10px 15px;
         display: flex;
@@ -209,14 +187,11 @@
         justify-content: center;
         font-weight: bold;
         font-size: 8pt;
-        text-align: center; /* Image shows centered labels? No, split. */
+        text-align: center;
       }
       .total-label-text {
-        display: block;
-        text-align: center;
         margin-bottom: 2px;
       }
-
       .total-value-cell {
         flex: 1;
         display: flex;
