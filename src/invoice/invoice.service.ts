@@ -212,6 +212,7 @@ export class InvoiceService {
             zatcaStatus: true,
             reportingStatus: true,
             clearanceStatus: true,
+            createdAt: true,
           },
         },
       },

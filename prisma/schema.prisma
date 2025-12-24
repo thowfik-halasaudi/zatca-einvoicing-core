@@ -115,6 +115,7 @@ model ZatcaSubmission {
   qrCode          String?  @db.Text
   zatcaResponse   Json?
   
+  createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
 

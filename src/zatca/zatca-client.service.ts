@@ -247,9 +247,7 @@ export class ZatcaClientService {
     secret: string,
     production: boolean = false
   ): Promise<any> {
-    const baseUrl = production
-      ? this.productionUrl
-      : "https://gw-fatoora.zatca.gov.sa/e-invoicing/simulation";
+    const baseUrl = production ? this.productionUrl : this.sandboxUrl;
     const url = `${baseUrl}/invoices/clearance/single`;
     return this.validateInvoice(
       url,
@@ -277,9 +275,7 @@ export class ZatcaClientService {
     secret: string,
     production: boolean = false
   ): Promise<any> {
-    const baseUrl = production
-      ? this.productionUrl
-      : "https://gw-fatoora.zatca.gov.sa/e-invoicing/simulation";
+    const baseUrl = production ? this.productionUrl : this.sandboxUrl;
     const url = `${baseUrl}/invoices/reporting/single`;
     return this.validateInvoice(
       url,
@@ -338,6 +334,20 @@ export class ZatcaClientService {
       const errorData: any = axiosError.response?.data;
 
       let errorMsg = `${type} Submission Failed`;
+
+      console.error(`[ZATCA ERROR] ${type} Failed.`);
+      console.error(`Status: ${axiosError.response?.status}`);
+      console.error(`Status Text: ${axiosError.response?.statusText}`);
+      console.error(
+        `Headers:`,
+        JSON.stringify(axiosError.response?.headers, null, 2)
+      );
+      console.error(
+        `Data (Raw):`,
+        JSON.stringify(axiosError.response?.data, null, 2)
+      );
+      console.error(`Request URL: ${axiosError.config?.url}`);
+      // console.error(`Request Data:`, JSON.stringify(axiosError.config?.data, null, 2)); // Be careful not to log secrets if possible, but payload is just JSON with base64 XML.
 
       if (errorData?.validationResults?.errorMessages?.length > 0) {
         const firstErr = errorData.validationResults.errorMessages[0];

@@ -271,6 +271,7 @@ export class XmlTemplateService {
 
     // Determine ProfileID based on invoice type
     // Standard (B2B) = clearance:1.0, Simplified (B2C) = reporting:1.0
+    // NOTE: ZATCA Simulation might require 'reporting:1.0' for standard invoices, but Production requires 'clearance:1.0'.
     const profileID = isStandard ? "clearance:1.0" : "reporting:1.0";
 
     // Base template
@@ -338,6 +339,19 @@ export class XmlTemplateService {
             </cac:PartyLegalEntity>
         </cac:Party>
     </cac:AccountingSupplierParty>${customerPartyXml}
+    ${
+      invoice.invoiceTypeCode === "381" || invoice.invoiceTypeCode === "383"
+        ? `
+    <cac:PaymentMeans>
+        <cbc:PaymentMeansCode>42</cbc:PaymentMeansCode>
+        <cbc:InstructionNote>${
+          invoice.invoiceTypeCode === "381"
+            ? "Cancellation"
+            : "Debit Adjustment"
+        }</cbc:InstructionNote>
+    </cac:PaymentMeans>`
+        : ""
+    }
     <cac:TaxTotal>
         <cbc:TaxAmount currencyID="${invoice.currency || "SAR"}">${totals.vatTotal.toFixed(2)}</cbc:TaxAmount>${taxSubtotalsXml}
     </cac:TaxTotal>
