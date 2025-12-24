@@ -207,12 +207,12 @@ export class InvoiceService {
         invoiceCategory: true,
         totalAmount: true,
         status: true,
+        createdAt: true,
         submission: {
           select: {
             zatcaStatus: true,
             reportingStatus: true,
             clearanceStatus: true,
-            createdAt: true,
           },
         },
       },
