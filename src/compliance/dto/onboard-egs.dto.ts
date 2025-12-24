@@ -42,6 +42,10 @@ export class OnboardEgsDto {
   @IsNotEmpty()
   industryBusinessCategory: string;
 
+  @IsString()
+  @IsOptional()
+  propertyId?: string;
+
   @IsOptional()
   production?: boolean = false;
 }

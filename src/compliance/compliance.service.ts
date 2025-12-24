@@ -121,6 +121,7 @@ export class ComplianceService {
       locationAddress: dto.locationAddress,
       industryBusinessCategory: dto.industryBusinessCategory,
       production: Boolean(dto.production),
+      propertyId: dto.propertyId,
 
       csr,
       privateKey,
@@ -209,9 +210,15 @@ export class ComplianceService {
     );
 
     try {
+      // Step 3: Persist COMPLIANCE Credentials
       await this.prisma.egsUnit.update({
         where: { commonName },
         data: {
+          complianceBinarySecurityToken: issuedData.binarySecurityToken,
+          complianceSecret: issuedData.secret,
+          complianceRequestId: issuedData.requestID?.toString(),
+
+          // Legacy/Fallback: Also update main fields so step 3+4 works before Production CSID
           binarySecurityToken: issuedData.binarySecurityToken,
           secret: issuedData.secret,
           requestId: issuedData.requestID?.toString(),
@@ -226,7 +233,79 @@ export class ComplianceService {
       certificate: issuedData.binarySecurityToken,
       secret: issuedData.secret,
       requestId: issuedData.requestID,
-      message: `Compliance CSID issued and stored for ${commonName}.`,
+      message: `Compliance CSID issued and stored for ${commonName}. You can now run Compliance Checks.`,
+    };
+  }
+
+  /**
+   * issueProductionCsid
+   *
+   * Triggers Step 5 of Onboarding: Requesting the Final Production CSID.
+   * This MUST be called after 'checkCompliance' has successfully cleared/reported checks.
+   */
+  async issueProductionCsid(dto: { commonName: string; production?: boolean }) {
+    const { commonName, production } = dto;
+
+    // 1. Get EgsUnit
+    const egsUnit = await this.prisma.egsUnit.findUnique({
+      where: { commonName },
+    });
+
+    if (!egsUnit) {
+      throw new NotFoundException(`EGS Unit ${commonName} not found.`);
+    }
+
+    // 2. Validate Compliance Credentials existence
+    if (
+      !egsUnit.complianceBinarySecurityToken ||
+      !egsUnit.complianceSecret ||
+      !egsUnit.complianceRequestId
+    ) {
+      // Fallback to legacy fields if migration happened halfway
+      if (egsUnit.binarySecurityToken && egsUnit.secret && egsUnit.requestId) {
+        // Use legacy fields as compliance fields
+      } else {
+        throw new BadRequestException(
+          `Compliance CSID credentials missing. Please run 'issue-csid' (Step 2) first.`
+        );
+      }
+    }
+
+    const compCert =
+      egsUnit.complianceBinarySecurityToken || egsUnit.binarySecurityToken!;
+    const compSecret = egsUnit.complianceSecret || egsUnit.secret!;
+    const compReqId =
+      egsUnit.complianceRequestId || egsUnit.requestId!.toString();
+
+    // 3. Call ZATCA Production CSID API
+    const result = await this.zatcaClient.issueProductionCertificate(
+      compReqId,
+      compCert,
+      compSecret,
+      production || egsUnit.production
+    );
+
+    // 4. Persist Production Credentials
+    // At this point, the EGS is FULLY ONBOARDED.
+    // We update the "Active" fields (binarySecurityToken/secret) to use the Production ones.
+    await this.prisma.egsUnit.update({
+      where: { commonName },
+      data: {
+        productionBinarySecurityToken: result.binarySecurityToken,
+        productionSecret: result.secret,
+        productionRequestId: result.requestID?.toString(),
+
+        // OVERWRITE Active Credentials with Production ones
+        binarySecurityToken: result.binarySecurityToken,
+        secret: result.secret,
+        requestId: result.requestID?.toString(),
+      },
+    });
+
+    return {
+      commonName,
+      productionCsid: result.binarySecurityToken,
+      message: "Production CSID acquired successfully. EGS is now Live.",
     };
   }
 
@@ -488,8 +567,11 @@ export class ComplianceService {
       typeCode: typeCodeMatch[1],
     };
   }
-  async listOnboardedEgs() {
+  async listOnboardedEgs(commonName?: string) {
+    const whereClause = commonName ? { commonName } : {};
+
     const units = await this.prisma.egsUnit.findMany({
+      where: whereClause,
       orderBy: { commonName: "asc" },
       select: {
         commonName: true,
@@ -498,16 +580,72 @@ export class ComplianceService {
         binarySecurityToken: true,
         countryName: true,
         production: true,
+        complianceBinarySecurityToken: true,
+        productionBinarySecurityToken: true,
       },
     });
 
-    return units.map((u) => ({
-      slug: u.commonName,
-      organizationName: u.organizationName,
-      vatNumber: u.organizationIdentifier, // ✅ ACTUAL VAT NUMBER
-      status: u.binarySecurityToken ? "Onboarded" : "Pending",
-      country: u.countryName,
-      production: u.production,
-    }));
+    return units.map((u) => {
+      // Determine Status
+      let status = "Not Started";
+      if (u.productionBinarySecurityToken) status = "Production Live";
+      else if (u.complianceBinarySecurityToken) status = "Compliance Checks";
+      else if (u.binarySecurityToken) status = "Onboarded (Legacy)";
+      else status = "Draft";
+
+      return {
+        slug: u.commonName,
+        organizationName: u.organizationName,
+        vatNumber: u.organizationIdentifier,
+        status: status,
+        country: u.countryName,
+        production: u.production,
+      };
+    });
+  }
+
+  /**
+   * renewEgs
+   *
+   * Renews the certificate. In ZATCA Phase 2, this typically means:
+   * 1. Generating a new CSR (Step 1)
+   * 2. Getting a new Compliance CSID (Step 2)
+   * 3. (Optional) Running Checks
+   * 4. Getting a new Production CSID (Step 5)
+   *
+   * This is effectively a "Re-Onboard" but keeping the EGS record.
+   */
+  async renewEgs(commonName: string) {
+    // For MVP, we can treat this as "Go to Step 1".
+    // The existing Onboard logic checks for existence.
+    // We might need to allow overwriting in 'onboardEgs' if it's a specific 'renew' flag.
+    throw new BadRequestException(
+      "To renew, please restart the Onboarding Process (Step 1) with the same Common Name."
+    );
+  }
+
+  /**
+   * revokeEgs
+   *
+   * Revocation is usually handled via the Fatoora Portal manually or via specific APIs if enabled.
+   */
+  async revokeEgs(commonName: string) {
+    // Implementation depends on ZATCA Revocation API availability.
+    // Often, you just delete the keys locally.
+    await this.prisma.egsUnit.update({
+      where: { commonName },
+      data: {
+        binarySecurityToken: null,
+        secret: null,
+        productionBinarySecurityToken: null,
+        productionSecret: null,
+        complianceBinarySecurityToken: null,
+        complianceSecret: null,
+      },
+    });
+    return {
+      message:
+        "EGS Credentials revoked locally. Please also revoke in Fatoora Portal.",
+    };
   }
 }

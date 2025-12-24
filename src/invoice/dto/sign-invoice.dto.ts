@@ -254,6 +254,12 @@ export class InvoiceLineItemDto {
   @ValidateNested()
   @Type(() => DocumentReferenceDto)
   documentReference?: DocumentReferenceDto;
+
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => AllowanceChargeDto)
+  allowanceCharges?: AllowanceChargeDto[];
 }
 
 export class TotalsDto {

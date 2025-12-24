@@ -43,14 +43,26 @@ export class XmlTemplateService {
         </cac:DocumentReference>`
           : "";
 
+        const lineAllowanceChargesXml = (item.allowanceCharges || [])
+          .map((ac) => {
+            return `
+        <cac:AllowanceCharge>
+            <cbc:ChargeIndicator>${ac.chargeIndicator}</cbc:ChargeIndicator>
+            ${ac.reasonCode ? `<cbc:AllowanceChargeReasonCode>${ac.reasonCode}</cbc:AllowanceChargeReasonCode>` : ""}
+            ${ac.reason ? `<cbc:AllowanceChargeReason>${ac.reason}</cbc:AllowanceChargeReason>` : ""}
+            <cbc:Amount currencyID="${invoice.currency || "SAR"}">${ac.amount.toFixed(2)}</cbc:Amount>
+        </cac:AllowanceCharge>`;
+          })
+          .join("");
+
         return `
     <cac:InvoiceLine>
         <cbc:ID>${item.lineId}</cbc:ID>
         <cbc:InvoicedQuantity unitCode="${item.unitCode || "PCE"}">${item.quantity}</cbc:InvoicedQuantity>
-        <cbc:LineExtensionAmount currencyID="${invoice.currency || "SAR"}">${item.taxExclusiveAmount.toFixed(2)}</cbc:LineExtensionAmount>${docRefXml}
+        <cbc:LineExtensionAmount currencyID="${invoice.currency || "SAR"}">${item.taxExclusiveAmount.toFixed(2)}</cbc:LineExtensionAmount>${docRefXml}${lineAllowanceChargesXml}
         <cac:TaxTotal>
             <cbc:TaxAmount currencyID="${invoice.currency || "SAR"}">${item.vatAmount.toFixed(2)}</cbc:TaxAmount>
-            <cbc:RoundingAmount currencyID="${invoice.currency || "SAR"}">${(item.taxExclusiveAmount + item.vatAmount).toFixed(2)}</cbc:RoundingAmount>
+            <cbc:RoundingAmount currencyID="${invoice.currency || "SAR"}">${(item.taxExclusiveAmount + item.vatAmount + (item.allowanceCharges?.reduce((sum, c) => (c.chargeIndicator ? sum + c.amount : sum - c.amount), 0) || 0)).toFixed(2)}</cbc:RoundingAmount>
         </cac:TaxTotal>
         <cac:Item>
             <cbc:Name>${item.description}</cbc:Name>
@@ -110,7 +122,15 @@ export class XmlTemplateService {
       }
 
       const sub = taxSubtotalsMap.get(key)!;
-      sub.taxableAmount += item.taxExclusiveAmount;
+
+      // Calculate net line amount after charges/allowances (Assumes same tax category as line)
+      // Note: If charges have different tax rates, they should ideally be handled separately,
+      // but for Municipality Fees (Base Taxable), this works.
+      const lineNetChange = (item.allowanceCharges || []).reduce((sum, ac) => {
+        return ac.chargeIndicator ? sum + ac.amount : sum - ac.amount;
+      }, 0);
+
+      sub.taxableAmount += item.taxExclusiveAmount + lineNetChange;
       sub.taxAmount += item.vatAmount;
     });
 

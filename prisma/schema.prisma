@@ -134,7 +134,20 @@ model EgsUnit {
   csr                       String    @db.Text
   privateKey                String    @db.Text
   onboardingConfig           String?   @db.Text
+  propertyId                 String?
 
+
+  // Compliance CSID (Temporary, for checks)
+  complianceBinarySecurityToken String?   @db.Text
+  complianceSecret              String?   @db.Text
+  complianceRequestId           String?
+
+  // Production CSID (Permanent, for signing)
+  productionBinarySecurityToken String?   @db.Text
+  productionSecret              String?   @db.Text
+  productionRequestId           String?
+
+  // CURRENT ACTIVE TOKENS (Used by InvoiceService)
   binarySecurityToken       String?   @db.Text
   secret                    String?   @db.Text
   requestId                 String?

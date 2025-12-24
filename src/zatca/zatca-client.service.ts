@@ -98,6 +98,75 @@ export class ZatcaClientService {
   }
 
   /**
+   * issueProductionCertificate
+   *
+   * Corresponds to ZATCA Step 5: "Production CSID".
+   * This is the final step of onboarding. After the EGS has passed compliance checks,
+   * we exchange the Compliance Request ID for a permanent Production CSID.
+   */
+  async issueProductionCertificate(
+    complianceRequestId: string,
+    complianceCertificate: string,
+    complianceSecret: string,
+    production: boolean = false
+  ): Promise<ComplianceCertificateResponse> {
+    const baseUrl = production ? this.productionUrl : this.sandboxUrl;
+    const url = `${baseUrl}/production/csids`;
+
+    const strippedCert = complianceCertificate
+      .replace(/-----(BEGIN|END) CERTIFICATE-----/gi, "")
+      .replace(/[\r\n\s]/g, "");
+
+    const authString = `${strippedCert}:${complianceSecret}`;
+    const authHeader = `Basic ${Buffer.from(authString).toString("base64")}`;
+
+    const headers = {
+      "Accept-Version": this.apiVersion,
+      "Accept-Language": "en",
+      "Content-Type": "application/json",
+      Authorization: authHeader,
+    };
+
+    const payload = {
+      compliance_request_id: complianceRequestId,
+    };
+
+    try {
+      const response = await lastValueFrom(
+        this.httpService.post<ComplianceCertificateResponse>(url, payload, {
+          headers,
+        })
+      );
+
+      const data = response.data;
+
+      // Normalize certificate format
+      if (
+        data.binarySecurityToken &&
+        !data.binarySecurityToken.includes("-----BEGIN")
+      ) {
+        data.binarySecurityToken = `-----BEGIN CERTIFICATE-----\n${data.binarySecurityToken}\n-----END CERTIFICATE-----`;
+      }
+
+      return data;
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      const errorData: any = axiosError.response?.data;
+
+      let errorMsg = "ZATCA Production CSID Error";
+      if (errorData?.errors && Array.isArray(errorData.errors)) {
+        errorMsg = errorData.errors
+          .map((e: any) => e.message || e.code)
+          .join(", ");
+      } else if (errorData?.message) {
+        errorMsg = errorData.message;
+      }
+
+      throw new BadRequestException(`Zatca API: ${errorMsg}`);
+    }
+  }
+
+  /**
    * checkCompliance
    *
    * Corresponds to ZATCA Step 4: "Compliance Check".

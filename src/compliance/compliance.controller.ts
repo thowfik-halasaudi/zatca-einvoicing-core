@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from "@nestjs/common";
+import { Body, Controller, Get, Post, Query } from "@nestjs/common";
 import { ComplianceService } from "./compliance.service";
 import { ApiTags, ApiOperation, ApiResponse } from "@nestjs/swagger";
 import { OnboardEgsDto } from "./dto/onboard-egs.dto";
@@ -33,8 +33,8 @@ export class ComplianceController {
     status: 200,
     description: "List of EGS units retrieved successfully",
   })
-  async listEgs() {
-    return this.complianceService.listOnboardedEgs();
+  async listEgs(@Query("commonName") commonName?: string) {
+    return this.complianceService.listOnboardedEgs(commonName);
   }
 
   /**
@@ -66,6 +66,24 @@ export class ComplianceController {
   })
   async issueCsid(@Body() dto: IssueCsidDto) {
     return this.complianceService.issueCsid(dto);
+  }
+
+  /**
+   * production
+   *
+   * Onboarding Final Step: Exchanges Compliance CSID for Production CSID.
+   * Call this AFTER 'check' passes successfully.
+   */
+  @Post("production")
+  @ApiOperation({ summary: "Issue Final Production CSID" })
+  @ApiResponse({
+    status: 201,
+    description: "Production CSID issued and stored. EGS is now live.",
+  })
+  async issueProductionCsid(
+    @Body() dto: { commonName: string; production?: boolean }
+  ) {
+    return this.complianceService.issueProductionCsid(dto);
   }
 
   /**
