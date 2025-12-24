@@ -31,6 +31,16 @@ export class InvoiceService {
     const { egs, invoice } = dto;
     const commonName = egs.commonName;
 
+    console.log("\n========================================");
+    console.log("[SIGN_INVOICE] Starting invoice signing...");
+    console.log("[SIGN_INVOICE] Common Name:", commonName);
+    console.log("[SIGN_INVOICE] Invoice Type Code:", invoice.invoiceTypeCode);
+    console.log(
+      "[SIGN_INVOICE] Invoice Type Code Name:",
+      invoice.invoiceTypeCodeName
+    );
+    console.log("[SIGN_INVOICE] Is Production:", egs.production);
+
     // 1. Generate Sequence and Retrieve Chain Data (ICV and PIH)
     // 1. Generate Sequence and Retrieve Chain Data (ICV and PIH)
     const seqData = await this.sequenceService.generateNextSerialNumber(dto);
@@ -83,7 +93,13 @@ export class InvoiceService {
     );
 
     // 2. Generate Base XML
+    console.log("[XML_GEN] Generating base XML from template...");
     const baseXml = this.xmlTemplate.generateInvoiceXml(dto);
+    console.log("[XML_GEN] Base XML length:", baseXml.length, "bytes");
+    console.log(
+      "[XML_GEN] Contains InvoiceTypeCode:",
+      baseXml.includes("InvoiceTypeCode")
+    );
 
     const unsignedPath = await this.fileManager.writeTempFile(
       commonName,
@@ -106,14 +122,37 @@ export class InvoiceService {
       }
 
       const signedXml = await this.fileManager.readFile(signedPath);
+      console.log("[SIGN] Signed XML generated successfully");
+      console.log("[SIGN] Signed XML length:", signedXml.length, "bytes");
+
+      // Extract UUID from signed XML
+      const uuidMatch = signedXml.match(/<cbc:UUID>([^<]+)<\/cbc:UUID>/);
+      const extractedUUID = uuidMatch ? uuidMatch[1].trim() : "NOT_FOUND";
+      console.log("[EXTRACTION] Invoice UUID:", extractedUUID);
+
+      // Extract Hash from signed XML
+      const hashMatch = signedXml.match(/URI=""[\s\S]*?DigestValue>([^<]+)</);
+      const extractedHash = hashMatch ? hashMatch[1].trim() : "NOT_FOUND";
+      console.log("[EXTRACTION] Invoice Hash:", extractedHash);
+      console.log(
+        "[EXTRACTION] Hash length:",
+        extractedHash.length,
+        "(expected: 44)"
+      );
 
       // Extract QR code from signed XML for the frontend
       const qrMatch = signedXml.match(
         /<cac:AdditionalDocumentReference>\s*<cbc:ID>QR<\/cbc:ID>\s*<cac:Attachment>\s*<cbc:EmbeddedDocumentBinaryObject[^>]*>([^<]+)<\/cbc:EmbeddedDocumentBinaryObject>/i
       );
       const qrCode = qrMatch ? qrMatch[1].trim() : undefined;
+      console.log("[QR] QR Code extracted:", qrCode ? "YES" : "NO");
+      if (qrCode) {
+        console.log("[QR] QR Base64 length:", qrCode.length);
+        console.log("[QR] QR first 50 chars:", qrCode.substring(0, 50) + "...");
+      }
 
       // 4. PERSIST INVOICE TO DATABASE
+      console.log("[DB] Persisting invoice to database...");
 
       const savedInvoice = await this.persistInvoiceToDatabase(
         dto,
@@ -122,23 +161,16 @@ export class InvoiceService {
         serialNumber
       );
 
-      // 6. SUBMIT TO ZATCA (AUTO-TRIGGER)
-      let submissionStatus = "PENDING_SUBMISSION";
-      let submissionResult = null;
+      console.log("[DB] Invoice persisted successfully");
+      console.log("[DB] Invoice ID:", savedInvoice.id);
+      console.log("[DB] Invoice UUID:", savedInvoice.uuid);
+      console.log("[DB] Invoice Number:", serialNumber);
 
-      try {
-        submissionResult = await this.complianceService.submitToZatca({
-          commonName: dto.egs.commonName,
-          invoiceSerialNumber: serialNumber,
-          production: dto.egs.production || false,
-        });
-        submissionStatus = "SUBMITTED";
-      } catch (submitError) {
-        console.error(
-          `❌ [ZATCA] Auto-Submission Failed: ${submitError.message}`
-        );
-        submissionStatus = "FAILED";
-      }
+      // IMPORTANT: Only increment counter after successful save
+      await this.sequenceService.commitCounterIncrement(commonName);
+      console.log("[COUNTER] Invoice counter incremented successfully");
+
+      console.log("========================================\n");
 
       return {
         invoiceId: savedInvoice.id,
@@ -146,9 +178,7 @@ export class InvoiceService {
         signedXml,
         qrCode,
         fileName: `${serialNumber}_signed.xml`,
-        message: "Invoice signed, saved, and submitted to ZATCA.",
-        zatcaStatus: submissionStatus,
-        submissionResult,
+        message: "Invoice signed and saved successfully.",
       };
     } catch (error) {
       this.logger.error(`Fatoora Signing Failed: ${error.message}`);
@@ -304,6 +334,19 @@ export class InvoiceService {
       );
     }
 
+    // Combine address fields into single strings for database storage
+    const formatAddress = (addr: any) => {
+      if (!addr) return "N/A";
+      const parts = [];
+      if (addr.street) parts.push(addr.street);
+      if (addr.buildingNumber) parts.push(`Bldg ${addr.buildingNumber}`);
+      if (addr.district) parts.push(addr.district);
+      if (addr.city) parts.push(addr.city);
+      if (addr.postalCode) parts.push(addr.postalCode);
+      if (addr.country) parts.push(addr.country);
+      return parts.length > 0 ? parts.join(", ") : "N/A";
+    };
+
     try {
       // Step 1: Create main Invoice record using CLI-extracted data
       const createdInvoice = await this.prisma.invoice.create({
@@ -320,15 +363,15 @@ export class InvoiceService {
           // EGS Reference
           commonName: egs.commonName,
 
-          // Seller Info (from request DTO)
+          // Seller Info (from request DTO with combined address)
           sellerName: supplier.registrationName,
           sellerVatNumber: supplier.vatNumber,
-          sellerAddress: supplier.address?.street || "N/A",
+          sellerAddress: formatAddress(supplier.address),
 
-          // Buyer Info (Optional for B2C)
+          // Buyer Info (Optional for B2C with combined address)
           buyerName: customer?.name || null,
           buyerVatNumber: customer?.vatNumber || null,
-          buyerAddress: customer?.address?.street || null,
+          buyerAddress: formatAddress(customer?.address),
 
           // References (for Credit/Debit Notes)
           referenceInvoiceNumber: invoice.billingReferenceId || null,

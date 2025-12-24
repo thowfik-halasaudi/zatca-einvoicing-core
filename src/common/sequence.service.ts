@@ -50,8 +50,31 @@ export class SequenceService {
     // 3. Sequence Key: Using commonName to ensure ONE sequence per certificate (ZATCA requirement)
     const seriesKey = commonName;
 
-    // Get and Increment Counter in DB
-    const counterRecord = await this.prisma.invoiceCounter.upsert({
+    // Get current counter WITHOUT incrementing (increment only after successful save)
+    const counterRecord = await this.prisma.invoiceCounter.findUnique({
+      where: { seriesKey },
+    });
+
+    // Calculate next number (will be current + 1, or 1 if new)
+    const nextCount = counterRecord ? counterRecord.lastNumber + 1 : 1;
+
+    // Pad to 8 digits
+    const paddedSeq = nextCount.toString().padStart(8, "0");
+
+    // We still use the prefix in the serialNumber string for readability
+    const serialNumber = `${hotelCode}-${prefix}-${year}-${paddedSeq}`;
+
+    return { serialNumber, counter: nextCount, previousHash };
+  }
+
+  /**
+   * Commits the counter increment after successful invoice creation.
+   * This ensures we only increment if the invoice was successfully saved.
+   */
+  async commitCounterIncrement(commonName: string): Promise<void> {
+    const seriesKey = commonName;
+
+    await this.prisma.invoiceCounter.upsert({
       where: { seriesKey },
       update: {
         lastNumber: { increment: 1 },
@@ -62,14 +85,6 @@ export class SequenceService {
       },
     });
 
-    const nextCount = counterRecord.lastNumber;
-
-    // Pad to 8 digits
-    const paddedSeq = nextCount.toString().padStart(8, "0");
-
-    // We still use the prefix in the serialNumber string for readability
-    const serialNumber = `${hotelCode}-${prefix}-${year}-${paddedSeq}`;
-
-    return { serialNumber, counter: nextCount, previousHash };
+    this.logger.log(`✅ Counter incremented for ${commonName}`);
   }
 }

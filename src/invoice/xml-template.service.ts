@@ -81,6 +81,57 @@ export class XmlTemplateService {
       })
       .join("");
 
+    // Prepayment Line Item (if prepayment exists)
+    const prepaymentLineItemXml = dto.prepayment
+      ? `
+    <cac:InvoiceLine>
+        <cbc:ID>${lineItems.length + 1}</cbc:ID>
+        <cbc:InvoicedQuantity unitCode="PCE">0.000000</cbc:InvoicedQuantity>
+        <cbc:LineExtensionAmount currencyID="${invoice.currency || "SAR"}">0.00</cbc:LineExtensionAmount>${
+          dto.prepayment.prepaymentInvoiceId
+            ? `
+        <cac:DocumentReference>
+            <cbc:ID>${dto.prepayment.prepaymentInvoiceId}</cbc:ID>${
+              dto.prepayment.prepaymentDate
+                ? `
+            <cbc:IssueDate>${dto.prepayment.prepaymentDate}</cbc:IssueDate>`
+                : ""
+            }
+            <cbc:DocumentTypeCode>386</cbc:DocumentTypeCode>
+        </cac:DocumentReference>`
+            : ""
+        }
+        <cac:TaxTotal>
+            <cbc:TaxAmount currencyID="${invoice.currency || "SAR"}">${dto.prepayment.prepaidVATAmount.toFixed(2)}</cbc:TaxAmount>
+            <cbc:RoundingAmount currencyID="${invoice.currency || "SAR"}">0.00</cbc:RoundingAmount>
+            <cac:TaxSubtotal>
+                <cbc:TaxableAmount currencyID="${invoice.currency || "SAR"}">${dto.prepayment.prepaidAmountExVAT.toFixed(2)}</cbc:TaxableAmount>
+                <cbc:TaxAmount currencyID="${invoice.currency || "SAR"}">${dto.prepayment.prepaidVATAmount.toFixed(2)}</cbc:TaxAmount>
+                <cac:TaxCategory>
+                    <cbc:ID>S</cbc:ID>
+                    <cbc:Percent>15.00</cbc:Percent>
+                    <cac:TaxScheme>
+                        <cbc:ID>VAT</cbc:ID>
+                    </cac:TaxScheme>
+                </cac:TaxCategory>
+            </cac:TaxSubtotal>
+        </cac:TaxTotal>
+        <cac:Item>
+            <cbc:Name>Advance payment received - Booking deposit</cbc:Name>
+            <cac:ClassifiedTaxCategory>
+                <cbc:ID>S</cbc:ID>
+                <cbc:Percent>15.00</cbc:Percent>
+                <cac:TaxScheme>
+                    <cbc:ID>VAT</cbc:ID>
+                </cac:TaxScheme>
+            </cac:ClassifiedTaxCategory>
+        </cac:Item>
+        <cac:Price>
+            <cbc:PriceAmount currencyID="${invoice.currency || "SAR"}">0.00</cbc:PriceAmount>
+        </cac:Price>
+    </cac:InvoiceLine>`
+      : "";
+
     // Billing Reference (For Credit/Debit Notes)
     const billingReferenceXml =
       isNote && invoice.billingReferenceId
@@ -218,6 +269,10 @@ export class XmlTemplateService {
     </cac:AccountingCustomerParty>`;
     }
 
+    // Determine ProfileID based on invoice type
+    // Standard (B2B) = clearance:1.0, Simplified (B2C) = reporting:1.0
+    const profileID = isStandard ? "clearance:1.0" : "reporting:1.0";
+
     // Base template
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2">
@@ -229,7 +284,7 @@ export class XmlTemplateService {
             </ext:ExtensionContent>
         </ext:UBLExtension>
     </ext:UBLExtensions>
-    <cbc:ProfileID>reporting:1.0</cbc:ProfileID>
+    <cbc:ProfileID>${profileID}</cbc:ProfileID>
     <cbc:ID>${invoice.invoiceSerialNumber}</cbc:ID>
     <cbc:UUID>${crypto.randomUUID()}</cbc:UUID>
     <cbc:IssueDate>${finalDate}</cbc:IssueDate>
@@ -265,8 +320,7 @@ export class XmlTemplateService {
             <cac:PostalAddress>
                 <cbc:StreetName>${supplier.address.street || "Main St"}</cbc:StreetName>
                 <cbc:BuildingNumber>${supplier.address.buildingNumber || "1234"}</cbc:BuildingNumber>
-                <cbc:PlotIdentification>${supplier.address.district || "0000"}</cbc:PlotIdentification>
-                <cbc:CitySubdivisionName>${supplier.address.district || "Sub Name"}</cbc:CitySubdivisionName>
+                <cbc:CitySubdivisionName>${supplier.address.district || "District"}</cbc:CitySubdivisionName>
                 <cbc:CityName>${supplier.address.city || "Riyadh"}</cbc:CityName>
                 <cbc:PostalZone>${supplier.address.postalCode || "12345"}</cbc:PostalZone>
                 <cac:Country>
@@ -299,7 +353,7 @@ export class XmlTemplateService {
         ${totals.prepaidAmount ? `<cbc:PrepaidAmount currencyID="${invoice.currency || "SAR"}">${totals.prepaidAmount.toFixed(2)}</cbc:PrepaidAmount>` : ""}
         ${totals.payableRoundingAmount ? `<cbc:PayableRoundingAmount currencyID="${invoice.currency || "SAR"}">${totals.payableRoundingAmount.toFixed(2)}</cbc:PayableRoundingAmount>` : ""}
         <cbc:PayableAmount currencyID="${invoice.currency || "SAR"}">${totals.payableAmount.toFixed(2)}</cbc:PayableAmount>
-    </cac:LegalMonetaryTotal>${lineItemsXml}
+    </cac:LegalMonetaryTotal>${lineItemsXml}${prepaymentLineItemXml}
 </Invoice>`;
 
     return xml;

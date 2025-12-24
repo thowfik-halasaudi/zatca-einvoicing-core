@@ -97,6 +97,10 @@ export class InvoiceMetaDto {
 export class AddressDto {
   @IsString()
   @IsOptional()
+  fullAddress?: string; // Single-line address (e.g., "123 Main St, Riyadh, 12345, SA")
+
+  @IsString()
+  @IsOptional()
   street?: string;
 
   @IsString()
@@ -203,6 +207,25 @@ export class CustomerDto {
   @ValidateNested()
   @Type(() => AddressDto)
   address?: AddressDto;
+}
+
+export class PrepaymentDto {
+  @IsNumber()
+  prepaidAmount: number; // Total prepaid including VAT
+
+  @IsNumber()
+  prepaidAmountExVAT: number; // Prepaid amount excluding VAT
+
+  @IsNumber()
+  prepaidVATAmount: number; // VAT on prepaid amount
+
+  @IsString()
+  @IsOptional()
+  prepaymentInvoiceId?: string; // Reference to prepayment invoice
+
+  @IsString()
+  @IsOptional()
+  prepaymentDate?: string; // Date when prepayment was made
 }
 
 export class InvoiceLineItemDto {
@@ -332,6 +355,12 @@ export class SignInvoiceDto {
   @ValidateNested({ each: true })
   @Type(() => AllowanceChargeDto)
   allowanceCharges?: AllowanceChargeDto[];
+
+  @IsObject()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PrepaymentDto)
+  prepayment?: PrepaymentDto;
 
   @IsObject()
   @ValidateNested()

@@ -16,6 +16,7 @@ onboarding-config.properties
 
 # Temporary Invoice Data
 tmp/
+test-payloads/
 
 # OS Specific
 .DS_Store

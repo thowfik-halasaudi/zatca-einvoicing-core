@@ -403,6 +403,12 @@ export class ComplianceService {
     const { commonName, invoiceSerialNumber, production } = dto;
     const isProduction = !!production;
 
+    console.log("\n========================================");
+    console.log("[SUBMIT_TO_ZATCA] Starting submission...");
+    console.log("[SUBMIT_TO_ZATCA] Common Name:", commonName);
+    console.log("[SUBMIT_TO_ZATCA] Invoice Serial:", invoiceSerialNumber);
+    console.log("[SUBMIT_TO_ZATCA] Production Mode:", isProduction);
+
     // 1. Load Invoice
     const invoice = await this.prisma.invoice.findUnique({
       where: { invoiceNumber: invoiceSerialNumber },
@@ -410,10 +416,22 @@ export class ComplianceService {
     });
 
     if (!invoice || !invoice.signedXml || !invoice.hash?.currentInvoiceHash) {
+      console.error("[SUBMIT_TO_ZATCA] Invoice not found or missing data");
       throw new NotFoundException(
         `Invoice ${invoiceSerialNumber} not found or missing signed XML/hash.`
       );
     }
+
+    console.log("[SUBMIT_TO_ZATCA] Invoice loaded successfully");
+    console.log("[SUBMIT_TO_ZATCA] Invoice UUID:", invoice.uuid);
+    console.log(
+      "[SUBMIT_TO_ZATCA] Invoice Type Code Name:",
+      invoice.invoiceTypeCodeName
+    );
+    console.log(
+      "[SUBMIT_TO_ZATCA] Invoice Hash:",
+      invoice.hash.currentInvoiceHash
+    );
 
     // 2. Load Tokens
     const egsUnit = await this.prisma.egsUnit.findUnique({
@@ -435,11 +453,23 @@ export class ComplianceService {
     const isStandard = invoice.invoiceTypeCodeName.startsWith("01");
     const submissionType = isStandard ? "CLEARANCE" : "REPORTING";
 
+    console.log(
+      "[SUBMIT_TO_ZATCA] Invoice Type:",
+      isStandard ? "STANDARD (B2B)" : "SIMPLIFIED (B2C)"
+    );
+    console.log("[SUBMIT_TO_ZATCA] Submission Type:", submissionType);
+    console.log(
+      "[SUBMIT_TO_ZATCA] ZATCA Endpoint:",
+      isStandard ? "CLEARANCE" : "REPORTING"
+    );
+
     const signedXmlBase64 = Buffer.from(invoice.signedXml).toString("base64");
 
     // 4. Execute
+    console.log("[SUBMIT_TO_ZATCA] Calling ZATCA API...");
     let result;
     if (isStandard) {
+      console.log("[SUBMIT_TO_ZATCA] Calling clearInvoice...");
       result = await this.zatcaClient.clearInvoice(
         invoice.hash.currentInvoiceHash,
         invoice.uuid,
@@ -449,6 +479,7 @@ export class ComplianceService {
         isProduction
       );
     } else {
+      console.log("[SUBMIT_TO_ZATCA] Calling reportInvoice...");
       result = await this.zatcaClient.reportInvoice(
         invoice.hash.currentInvoiceHash,
         invoice.uuid,
@@ -458,6 +489,28 @@ export class ComplianceService {
         isProduction
       );
     }
+
+    console.log("[SUBMIT_TO_ZATCA] ZATCA API Response received");
+    console.log(
+      "[SUBMIT_TO_ZATCA] Reporting Status:",
+      result.reportingStatus || "N/A"
+    );
+    console.log(
+      "[SUBMIT_TO_ZATCA] Clearance Status:",
+      result.clearanceStatus || "N/A"
+    );
+    console.log(
+      "[SUBMIT_TO_ZATCA] Validation Status:",
+      result.validationResults?.status || "N/A"
+    );
+    console.log(
+      "[SUBMIT_TO_ZATCA] Error Count:",
+      result.validationResults?.errorMessages?.length || 0
+    );
+    console.log(
+      "[SUBMIT_TO_ZATCA] Warning Count:",
+      result.validationResults?.warningMessages?.length || 0
+    );
 
     // 5. Update Persistence using shared logic
     const overallStatus = await this.updateSubmissionStatus(
