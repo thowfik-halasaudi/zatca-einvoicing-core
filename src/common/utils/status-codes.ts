@@ -5,18 +5,14 @@
  * to HTTP codes. Ported from the legacy PMS system to maintain compatibility.
  */
 export const STATUS_CODES = {
-  /* ---------------------------------------------------------
-   * ✅ SUCCESS RESPONSES (2xx)
-   * --------------------------------------------------------- */
+  /* SUCCESS RESPONSES (2xx) */
   SUCCESS: 200, // Generic success (GET, PATCH, etc.)
   OK: 200, // Alias for SUCCESS (common alternative)
   CREATED: 201, // Resource successfully created (POST)
   ACCEPTED: 202, // Request accepted for async processing
   NO_CONTENT: 204, // Success but no body (DELETE, PUT silent success)
 
-  /* ---------------------------------------------------------
-   * ⚠️ CLIENT ERRORS (4xx)
-   * --------------------------------------------------------- */
+  /* CLIENT ERRORS (4xx) */
   BAD_REQUEST: 400, // Malformed request body or parameters
   UNAUTHORIZED: 401, // Missing/invalid authentication token
   FORBIDDEN: 403, // Authenticated but not permitted
@@ -30,9 +26,7 @@ export const STATUS_CODES = {
   TOKEN_EXPIRED: 498, // Non-standard: Token expired / invalid session
   TOKEN_REQUIRED: 499, // Non-standard: Missing token for protected route
 
-  /* ---------------------------------------------------------
-   * 💥 SERVER ERRORS (5xx)
-   * --------------------------------------------------------- */
+  /* SERVER ERRORS (5xx) */
   SERVER_ERROR: 500, // Generic internal server error
   NOT_IMPLEMENTED: 501, // Feature or endpoint not implemented
   BAD_GATEWAY: 502, // Invalid response from upstream server

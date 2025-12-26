@@ -85,6 +85,6 @@ export class SequenceService {
       },
     });
 
-    this.logger.log(`✅ Counter incremented for ${commonName}`);
+    this.logger.log(`Counter incremented for ${commonName}`);
   }
 }

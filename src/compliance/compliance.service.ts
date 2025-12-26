@@ -18,8 +18,8 @@ import { CheckComplianceDto } from "./dto/check-compliance.dto";
 import { SubmitZatcaDto } from "./dto/submit-zatca.dto";
 import { ZatcaClientService } from "../zatca/zatca-client.service";
 import { FileManagerService } from "../common/file-manager.service";
-import { ComplianceRepository } from "./compliance.repository"; // ✅ Repository
-import { InvoiceRepository } from "../invoice/invoice.repository"; // ✅ Repository
+import { ComplianceRepository } from "./compliance.repository"; // Repository
+import { InvoiceRepository } from "../invoice/invoice.repository"; // Repository
 import { Prisma } from "@prisma/client";
 
 /**
@@ -40,8 +40,8 @@ export class ComplianceService {
     private readonly cryptoCli: CryptoCliService,
     private readonly zatcaClient: ZatcaClientService,
     private readonly fileManager: FileManagerService,
-    private readonly complianceRepo: ComplianceRepository, // ✅ Injected Repo
-    private readonly invoiceRepo: InvoiceRepository // ✅ Injected Repo
+    private readonly complianceRepo: ComplianceRepository, // Injected Repo
+    private readonly invoiceRepo: InvoiceRepository // Injected Repo
   ) {}
 
   /**
@@ -52,11 +52,7 @@ export class ComplianceService {
    * The generated data are saved directly to PostgreSQL.
    */
   async onboardEgs(dto: OnboardEgsDto) {
-    /**
-     * ==================================================
-     * 1️⃣ HARD VALIDATION (DO NOT SKIP)
-     * ==================================================
-     */
+    /* HARD VALIDATION (DO NOT SKIP) */
     if (!dto.commonName?.trim()) {
       throw new BadRequestException("commonName is required");
     }
@@ -73,11 +69,7 @@ export class ComplianceService {
       throw new BadRequestException("organizationName is required");
     }
 
-    /**
-     * ==================================================
-     * 1️⃣b CHECK IF ALREADY EXISTS (RESTRICTION)
-     * ==================================================
-     */
+    /* CHECK IF ALREADY EXISTS (RESTRICTION) */
     const existingUnit = await this.complianceRepo.findByCommonName(
       dto.commonName
     );
@@ -88,39 +80,27 @@ export class ComplianceService {
       );
     }
 
-    /**
-     * ==================================================
-     * 2️⃣ BUILD CSR CONFIG
-     * ==================================================
-     */
+    /* BUILD CSR CONFIG */
 
     const csrConfig = this.cryptoCli.buildCSRConfig({
       ...dto,
       production: Boolean(dto.production),
     });
 
-    /**
-     * ==================================================
-     * 3️⃣ GENERATE CSR + PRIVATE KEY (FATOORA CLI)
-     * ==================================================
-     */
+    /* GENERATE CSR + PRIVATE KEY (FATOORA CLI) */
 
     const { privateKey, csr } = await this.cryptoCli.generateOnboardingData(
       dto.commonName,
       csrConfig
     );
 
-    /**
-     * ==================================================
-     * 4️⃣ PREPARE PRISMA INPUTS (STRICT)
-     * ==================================================
-     */
+    /* PREPARE PRISMA INPUTS (STRICT) */
 
     const createData: Prisma.EgsUnitCreateInput = {
       commonName: dto.commonName,
       serialNumber: dto.serialNumber,
 
-      organizationIdentifier: dto.organizationIdentifier, // ✅ REQUIRED
+      organizationIdentifier: dto.organizationIdentifier, // REQUIRED
 
       organizationUnitName: dto.organizationUnitName,
       organizationName: dto.organizationName,
@@ -142,11 +122,7 @@ export class ComplianceService {
       onboardingConfig: JSON.stringify(csrConfig),
     };
 
-    /**
-     * ==================================================
-     * 5️⃣ STORE IN DATABASE
-     * ==================================================
-     */
+    /* 5️⃣ STORE IN DATABASE */
 
     try {
       await this.complianceRepo.createEgsUnit(createData);
@@ -154,11 +130,7 @@ export class ComplianceService {
       throw e;
     }
 
-    /**
-     * ==================================================
-     * 6️⃣ FINAL RESPONSE
-     * ==================================================
-     */
+    /* FINAL RESPONSE */
 
     return {
       csr,
