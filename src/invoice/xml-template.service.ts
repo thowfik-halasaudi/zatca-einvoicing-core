@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { SignInvoiceDto } from "./dto/sign-invoice.dto";
 import * as crypto from "crypto";
+import { getZatcaDate, getZatcaTime } from "../common/utils/date.utils";
 
 @Injectable()
 export class XmlTemplateService {
@@ -20,10 +21,10 @@ export class XmlTemplateService {
       // Automatic initial hash usage logic
     }
 
-    // Auto-Time calculation
-    const now = new Date();
-    const finalDate = invoice.issueDate || now.toISOString().split("T")[0];
-    const finalTime = invoice.issueTime || now.toTimeString().split(" ")[0];
+    // Auto-Time calculation (Dynamic Timezone)
+    const timezone = invoice.timezone || "Asia/Riyadh";
+    const finalDate = invoice.issueDate || getZatcaDate(timezone);
+    const finalTime = invoice.issueTime || getZatcaTime(timezone);
 
     // Determine Logic Flags
     const isStandard = invoice.invoiceTypeCodeName?.startsWith("01") || false;

@@ -65,6 +65,10 @@ export class InvoiceMetaDto {
   @IsOptional()
   currency?: string = "SAR";
 
+  @IsString()
+  @IsOptional()
+  timezone?: string = "Asia/Riyadh"; // Property Timezone (e.g. Asia/Riyadh, Asia/Dubai)
+
   @IsNumber()
   @IsOptional()
   invoiceCounterNumber?: number;
