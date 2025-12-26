@@ -1,3 +1,9 @@
+/**
+ * Invoice Service
+ *
+ * Orchestrates business logic for invoices: formatting data for ZATCA (UBL XML),
+ * triggering the signing process, and interacting with ZATCA APIs via helper services.
+ */
 import {
   Injectable,
   Logger,
@@ -13,6 +19,7 @@ import * as path from "path";
 import { SequenceService } from "../common/sequence.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { ComplianceService } from "../compliance/compliance.service";
+import { InvoiceRepository } from "./invoice.repository";
 
 @Injectable()
 export class InvoiceService {
@@ -24,24 +31,24 @@ export class InvoiceService {
     private readonly xmlTemplate: XmlTemplateService,
     private readonly sequenceService: SequenceService,
     private readonly prisma: PrismaService,
-    private readonly complianceService: ComplianceService
+    private readonly complianceService: ComplianceService,
+    private readonly invoiceRepository: InvoiceRepository
   ) {}
 
   async signInvoice(dto: SignInvoiceDto) {
     const { egs, invoice } = dto;
     const commonName = egs.commonName;
 
-    console.log("\n========================================");
-    console.log("[SIGN_INVOICE] Starting invoice signing...");
-    console.log("[SIGN_INVOICE] Common Name:", commonName);
-    console.log("[SIGN_INVOICE] Invoice Type Code:", invoice.invoiceTypeCode);
-    console.log(
-      "[SIGN_INVOICE] Invoice Type Code Name:",
-      invoice.invoiceTypeCodeName
+    this.logger.log("[SIGN_INVOICE] Starting invoice signing...");
+    this.logger.debug(`[SIGN_INVOICE] Common Name: ${commonName}`);
+    this.logger.debug(
+      `[SIGN_INVOICE] Invoice Type Code: ${invoice.invoiceTypeCode}`
     );
-    console.log("[SIGN_INVOICE] Is Production:", egs.production);
+    this.logger.debug(
+      `[SIGN_INVOICE] Invoice Type Code Name: ${invoice.invoiceTypeCodeName}`
+    );
+    this.logger.debug(`[SIGN_INVOICE] Is Production: ${egs.production}`);
 
-    // 1. Generate Sequence and Retrieve Chain Data (ICV and PIH)
     // 1. Generate Sequence and Retrieve Chain Data (ICV and PIH)
     const seqData = await this.sequenceService.generateNextSerialNumber(dto);
 
@@ -93,13 +100,9 @@ export class InvoiceService {
     );
 
     // 2. Generate Base XML
-    console.log("[XML_GEN] Generating base XML from template...");
+    this.logger.debug("[XML_GEN] Generating base XML from template...");
     const baseXml = this.xmlTemplate.generateInvoiceXml(dto);
-    console.log("[XML_GEN] Base XML length:", baseXml.length, "bytes");
-    console.log(
-      "[XML_GEN] Contains InvoiceTypeCode:",
-      baseXml.includes("InvoiceTypeCode")
-    );
+    this.logger.debug(`[XML_GEN] Base XML length: ${baseXml.length} bytes`);
 
     const unsignedPath = await this.fileManager.writeTempFile(
       commonName,
@@ -110,10 +113,9 @@ export class InvoiceService {
     const signedPath = path.join(tempDir, `${serialNumber}_signed.xml`);
 
     // 3. Call Fatoora CLI to Sign
-
     try {
       const command = `fatoora -sign -invoice "${unsignedPath}" -key "${keyPath}" -cert "${certPath}" -signedInvoice "${signedPath}"`;
-      const output = await this.cliExecutor.execute(command);
+      await this.cliExecutor.execute(command);
 
       if (!(await this.fileManager.exists(signedPath))) {
         throw new Error(
@@ -122,37 +124,28 @@ export class InvoiceService {
       }
 
       const signedXml = await this.fileManager.readFile(signedPath);
-      console.log("[SIGN] Signed XML generated successfully");
-      console.log("[SIGN] Signed XML length:", signedXml.length, "bytes");
+      this.logger.log("[SIGN] Signed XML generated successfully");
+      this.logger.debug(`[SIGN] Signed XML length: ${signedXml.length} bytes`);
 
       // Extract UUID from signed XML
       const uuidMatch = signedXml.match(/<cbc:UUID>([^<]+)<\/cbc:UUID>/);
       const extractedUUID = uuidMatch ? uuidMatch[1].trim() : "NOT_FOUND";
-      console.log("[EXTRACTION] Invoice UUID:", extractedUUID);
+      this.logger.debug(`[EXTRACTION] Invoice UUID: ${extractedUUID}`);
 
       // Extract Hash from signed XML
       const hashMatch = signedXml.match(/URI=""[\s\S]*?DigestValue>([^<]+)</);
       const extractedHash = hashMatch ? hashMatch[1].trim() : "NOT_FOUND";
-      console.log("[EXTRACTION] Invoice Hash:", extractedHash);
-      console.log(
-        "[EXTRACTION] Hash length:",
-        extractedHash.length,
-        "(expected: 44)"
-      );
+      this.logger.debug(`[EXTRACTION] Invoice Hash: ${extractedHash}`);
 
       // Extract QR code from signed XML for the frontend
       const qrMatch = signedXml.match(
         /<cac:AdditionalDocumentReference>\s*<cbc:ID>QR<\/cbc:ID>\s*<cac:Attachment>\s*<cbc:EmbeddedDocumentBinaryObject[^>]*>([^<]+)<\/cbc:EmbeddedDocumentBinaryObject>/i
       );
       const qrCode = qrMatch ? qrMatch[1].trim() : undefined;
-      console.log("[QR] QR Code extracted:", qrCode ? "YES" : "NO");
-      if (qrCode) {
-        console.log("[QR] QR Base64 length:", qrCode.length);
-        console.log("[QR] QR first 50 chars:", qrCode.substring(0, 50) + "...");
-      }
+      this.logger.debug(`[QR] QR Code extracted: ${qrCode ? "YES" : "NO"}`);
 
       // 4. PERSIST INVOICE TO DATABASE
-      console.log("[DB] Persisting invoice to database...");
+      this.logger.log("[DB] Persisting invoice to database...");
 
       const savedInvoice = await this.persistInvoiceToDatabase(
         dto,
@@ -161,16 +154,13 @@ export class InvoiceService {
         serialNumber
       );
 
-      console.log("[DB] Invoice persisted successfully");
-      console.log("[DB] Invoice ID:", savedInvoice.id);
-      console.log("[DB] Invoice UUID:", savedInvoice.uuid);
-      console.log("[DB] Invoice Number:", serialNumber);
+      this.logger.log("[DB] Invoice persisted successfully");
+      this.logger.debug(`[DB] Invoice ID: ${savedInvoice.id}`);
+      this.logger.debug(`[DB] Invoice UUID: ${savedInvoice.uuid}`);
 
       // IMPORTANT: Only increment counter after successful save
       await this.sequenceService.commitCounterIncrement(commonName);
-      console.log("[COUNTER] Invoice counter incremented successfully");
-
-      console.log("========================================\n");
+      this.logger.log("[COUNTER] Invoice counter incremented successfully");
 
       return {
         invoiceId: savedInvoice.id,
@@ -191,43 +181,18 @@ export class InvoiceService {
           await this.fileManager.deleteTemp(signedPath);
         }
       } catch (cleanupError) {
-        console.warn(`⚠️ CLEANUP FAILED: ${cleanupError.message}`);
+        this.logger.warn(`⚠️ CLEANUP FAILED: ${cleanupError.message}`);
       }
     }
   }
 
   async listInvoices(commonName: string) {
-    return this.prisma.invoice.findMany({
-      where: { commonName },
-      orderBy: { issueDateTime: "desc" },
-      select: {
-        id: true,
-        invoiceNumber: true,
-        issueDateTime: true,
-        invoiceCategory: true,
-        totalAmount: true,
-        status: true,
-        createdAt: true,
-        submission: {
-          select: {
-            zatcaStatus: true,
-            reportingStatus: true,
-            clearanceStatus: true,
-          },
-        },
-      },
-    });
+    return this.invoiceRepository.findAllByCommonName(commonName);
   }
 
   async getInvoiceByNumber(invoiceNumber: string) {
-    const invoice = await this.prisma.invoice.findUnique({
-      where: { invoiceNumber },
-      include: {
-        items: true,
-        hash: true,
-        submission: true,
-      },
-    });
+    const invoice =
+      await this.invoiceRepository.findByInvoiceNumber(invoiceNumber);
 
     if (!invoice) {
       throw new NotFoundException(`Invoice ${invoiceNumber} not found`);
@@ -237,9 +202,8 @@ export class InvoiceService {
   }
 
   async getZatcaResponse(invoiceNumber: string) {
-    const submission = await this.prisma.zatcaSubmission.findFirst({
-      where: { invoice: { invoiceNumber } },
-    });
+    const submission =
+      await this.invoiceRepository.findSubmissionByInvoiceNumber(invoiceNumber);
 
     if (!submission) {
       throw new NotFoundException(
@@ -253,7 +217,7 @@ export class InvoiceService {
   /**
    * Persists the complete invoice to the database following the Prisma schema structure
    * EXTRACTS all data from the CLI-generated signed XML (no custom logic)
-   * Includes extensive console logging for debugging every step
+   * Includes extensive logging for debugging every step
    */
   private async persistInvoiceToDatabase(
     dto: SignInvoiceDto,
@@ -295,17 +259,14 @@ export class InvoiceService {
       : "NWZlY2ViOTZmOTk1YTRiMGNjM2YwOTUwZGYzMmM2YjQ5ZGEyN2IyOA==";
 
     // Extract Invoice Counter (ICV) from XML
-    const icvMatch = signedXml.match(
-      /<cbc:ID>ICV<\/cbc:ID>[\s\S]*?<cbc:EmbeddedDocumentBinaryObject[^>]*>([^<]+)<\/cbc:EmbeddedDocumentBinaryObject>/
-    );
-    const invoiceCounter = icvMatch
-      ? icvMatch[1].trim()
-      : invoice.invoiceCounterNumber?.toString() || "1";
+    // const icvMatch = signedXml.match(
+    //   /<cbc:ID>ICV<\/cbc:ID>[\s\S]*?<cbc:EmbeddedDocumentBinaryObject[^>]*>([^<]+)<\/cbc:EmbeddedDocumentBinaryObject>/
+    // );
+    // const invoiceCounter = icvMatch
+    //   ? icvMatch[1].trim()
+    //   : invoice.invoiceCounterNumber?.toString() || "1";
 
     // Extract Actual Invoice Hash (Digest Value for ZATCA)
-    // Must be the digest of the info being signed (Reference URI="")
-    // Regex: Look for URI="" (which indicates the main document reference)
-    // and then capture the next DigestValue. This ignores tag prefixes and attribute order.
     const invoiceHashMatch = signedXml.match(
       /URI=""[\s\S]*?DigestValue>([^<]+)</
     );
@@ -313,104 +274,72 @@ export class InvoiceService {
       ? invoiceHashMatch[1].trim()
       : "HASH_NOT_FOUND";
 
-    if (currentInvoiceHash === "HASH_NOT_FOUND") {
-      // Fallback: If regex fails, we might rely on the PIH? No, that's previous.
-    }
-
-    // Determine invoice type description
-    const invoiceTypeMap = {
-      "388": "TAX INVOICE",
-      "381": "CREDIT NOTE",
-      "383": "DEBIT NOTE",
-      "386": "PREPAYMENT INVOICE",
-      "380": "COMMERCIAL INVOICE",
-    };
-
-    const invoiceTypeLabel =
-      invoiceTypeMap[invoice.invoiceTypeCode] || "UNKNOWN";
-
     if (!cliGeneratedUuid) {
       throw new BadRequestException(
         "Failed to extract UUID from signed XML. CLI may have failed."
       );
     }
 
-    // Combine address fields into single strings for database storage
-    const formatAddress = (addr: any) => {
-      if (!addr) return "N/A";
-      const parts = [];
-      if (addr.street) parts.push(addr.street);
-      if (addr.buildingNumber) parts.push(`Bldg ${addr.buildingNumber}`);
-      if (addr.district) parts.push(addr.district);
-      if (addr.city) parts.push(addr.city);
-      if (addr.postalCode) parts.push(addr.postalCode);
-      if (addr.country) parts.push(addr.country);
-      return parts.length > 0 ? parts.join(", ") : "N/A";
-    };
-
     try {
       // Step 1: Create main Invoice record using CLI-extracted data
-      const createdInvoice = await this.prisma.invoice.create({
-        data: {
-          invoiceNumber: serialNumber,
-          uuid: cliGeneratedUuid, // ✅ USE CLI-GENERATED UUID
-          invoiceTypeCode: invoice.invoiceTypeCode,
-          invoiceTypeCodeName:
-            invoice.invoiceTypeCodeName ||
-            (customer?.type === "B2B" ? "0111010" : "0211010"),
-          invoiceCategory: customer?.type === "B2B" ? "STANDARD" : "SIMPLIFIED",
-          issueDateTime: cliIssueDateTime, // ✅ USE CLI-GENERATED TIMESTAMP
+      const createdInvoice = await this.invoiceRepository.create({
+        invoiceNumber: serialNumber,
+        uuid: cliGeneratedUuid, // ✅ USE CLI-GENERATED UUID
+        invoiceTypeCode: invoice.invoiceTypeCode,
+        invoiceTypeCodeName:
+          invoice.invoiceTypeCodeName ||
+          (customer?.type === "B2B" ? "0111010" : "0211010"),
+        invoiceCategory: customer?.type === "B2B" ? "STANDARD" : "SIMPLIFIED",
+        issueDateTime: cliIssueDateTime, // ✅ USE CLI-GENERATED TIMESTAMP
 
-          // EGS Reference
-          commonName: egs.commonName,
+        // EGS Reference
+        egsUnit: { connect: { commonName: egs.commonName } },
 
-          // Seller Info (detailed address)
-          sellerName: supplier.registrationName,
-          sellerVatNumber: supplier.vatNumber,
-          sellerStreet: supplier.address.street || "Unknown",
-          sellerBuildingNumber: supplier.address.buildingNumber || "0000",
-          sellerCity: supplier.address.city || "Riyadh",
-          sellerDistrict: supplier.address.district || "District",
-          sellerCountryCode: supplier.address.country || "SA",
-          sellerPostalCode: supplier.address.postalCode || "00000",
+        // Seller Info (detailed address)
+        sellerName: supplier.registrationName,
+        sellerVatNumber: supplier.vatNumber,
+        sellerStreet: supplier.address.street || "Unknown",
+        sellerBuildingNumber: supplier.address.buildingNumber || "0000",
+        sellerCity: supplier.address.city || "Riyadh",
+        sellerDistrict: supplier.address.district || "District",
+        sellerCountryCode: supplier.address.country || "SA",
+        sellerPostalCode: supplier.address.postalCode || "00000",
 
-          // Buyer Info (Optional for B2C)
-          buyerName: customer?.name || null,
-          buyerVatNumber: customer?.vatNumber || null,
-          buyerStreet: customer?.address?.street || null,
-          buyerBuildingNumber: customer?.address?.buildingNumber || null,
-          buyerCity: customer?.address?.city || null,
-          buyerDistrict: customer?.address?.district || null,
-          buyerCountryCode: customer?.address?.country || null,
-          buyerPostalCode: customer?.address?.postalCode || null,
+        // Buyer Info (Optional for B2C)
+        buyerName: customer?.name || null,
+        buyerVatNumber: customer?.vatNumber || null,
+        buyerStreet: customer?.address?.street || null,
+        buyerBuildingNumber: customer?.address?.buildingNumber || null,
+        buyerCity: customer?.address?.city || null,
+        buyerDistrict: customer?.address?.district || null,
+        buyerCountryCode: customer?.address?.country || null,
+        buyerPostalCode: customer?.address?.postalCode || null,
 
-          // References (for Credit/Debit Notes)
-          referenceInvoiceNumber: invoice.billingReferenceId || null,
-          referenceUUID: null,
-          referenceIssueDate: null,
+        // References (for Credit/Debit Notes)
+        referenceInvoiceNumber: invoice.billingReferenceId || null,
+        referenceUUID: null,
+        referenceIssueDate: null,
 
-          // Advance Payments
-          prepaidAmount: 0,
-          remainingAmount: totals.taxInclusiveTotal,
+        // Advance Payments
+        prepaidAmount: 0,
+        remainingAmount: totals.taxInclusiveTotal,
 
-          // Totals (from request DTO)
-          subTotal: totals.taxExclusiveTotal,
-          vatAmount: totals.vatTotal,
-          totalAmount: totals.taxInclusiveTotal,
-          currency: invoice.currency || "SAR",
+        // Totals (from request DTO)
+        subTotal: totals.taxExclusiveTotal,
+        vatAmount: totals.vatTotal,
+        totalAmount: totals.taxInclusiveTotal,
+        currency: invoice.currency || "SAR",
 
-          // Signed XML (CLI output)
-          signedXml: signedXml,
-          qrCode: qrCode || null,
+        // Signed XML (CLI output)
+        signedXml: signedXml,
+        qrCode: qrCode || null,
 
-          // Status
-          status: "ISSUED",
-        },
+        // Status
+        status: "ISSUED",
       });
 
-      // Step 2: Create Invoice Items (from request DTO)
       // Step 2: Create Line Items
-      const itemsData = lineItems.map((item, index) => {
+      const itemsData = lineItems.map((item) => {
         return {
           invoiceId: createdInvoice.id,
           description: item.description,
@@ -422,33 +351,26 @@ export class InvoiceService {
         };
       });
 
-      await this.prisma.invoiceItem.createMany({
-        data: itemsData,
-      });
+      await this.invoiceRepository.createItems(itemsData);
 
       // Step 3: Create Invoice Hash Record (using CLI-extracted hash)
-      await this.prisma.invoiceHash.create({
-        data: {
-          invoiceId: createdInvoice.id,
-          previousInvoiceHash: previousInvoiceHash, // ✅ FROM CLI XML (PIH)
-          currentInvoiceHash: currentInvoiceHash, // ✅ ACTUAL HASH (DigestValue)
-        },
+      await this.invoiceRepository.createHash({
+        invoice: { connect: { id: createdInvoice.id } },
+        previousInvoiceHash: previousInvoiceHash, // ✅ FROM CLI XML (PIH)
+        currentInvoiceHash: currentInvoiceHash, // ✅ ACTUAL HASH (DigestValue)
       });
 
-      // Step 4: Initialize ZATCA Submission Record
       // Step 4: Initialize ZATCA Submission Record
       const submissionType =
         customer?.type === "B2B" ? "CLEARANCE" : "REPORTING";
 
-      await this.prisma.zatcaSubmission.create({
-        data: {
-          invoiceId: createdInvoice.id,
-          submissionType: submissionType,
-          zatcaStatus: "PENDING",
-          attemptCount: 0,
-          qrCode: qrCode || null,
-          zatcaResponse: null,
-        },
+      await this.invoiceRepository.createSubmission({
+        invoice: { connect: { id: createdInvoice.id } },
+        submissionType: submissionType,
+        zatcaStatus: "PENDING",
+        attemptCount: 0,
+        qrCode: qrCode || null,
+        zatcaResponse: null,
       });
 
       return createdInvoice;

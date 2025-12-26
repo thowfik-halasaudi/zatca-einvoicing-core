@@ -6,10 +6,17 @@ import { PdfService } from "./pdf/pdf.service";
 import { CommonModule } from "../common/common.module";
 import { ComplianceModule } from "../compliance/compliance.module";
 
+import { InvoiceRepository } from "./invoice.repository";
+
 @Module({
   imports: [CommonModule, ComplianceModule],
   controllers: [InvoiceController],
-  providers: [InvoiceService, XmlTemplateService, PdfService],
-  exports: [InvoiceService, PdfService],
+  providers: [
+    InvoiceService,
+    XmlTemplateService,
+    PdfService,
+    InvoiceRepository,
+  ],
+  exports: [InvoiceService, PdfService, InvoiceRepository],
 })
 export class InvoiceModule {}

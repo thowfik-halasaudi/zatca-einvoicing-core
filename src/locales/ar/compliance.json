@@ -1,0 +1,8 @@
+{
+  "egs_list_success": "تم استرداد وحدات EGS بنجاح.",
+  "onboard_success": "تم تسجيل EGS وإصدار CSID بنجاح.",
+  "csid_issued_success": "تم إصدار CSID بنجاح.",
+  "production_csid_success": "تم إصدار CSID الإنتاجي بنجاح.",
+  "check_success": "تم التحقق من الامتثال بنجاح.",
+  "submission_success": "تم إرسال الفاتورة إلى هيئة الزكاة بنجاح."
+}

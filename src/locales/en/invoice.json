@@ -1,0 +1,5 @@
+{
+  "signed_success": "Invoice signed and saved successfully.",
+  "not_found": "Invoice not found.",
+  "sign_failed": "Failed to sign invoice."
+}

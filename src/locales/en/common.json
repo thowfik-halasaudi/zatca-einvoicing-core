@@ -1,0 +1,10 @@
+{
+  "success": "Operation completed successfully.",
+  "created": "Resource created successfully.",
+  "errors": {
+    "server_error": "Internal Server Error.",
+    "not_found": "Resource not found.",
+    "bad_request": "Bad Request.",
+    "unauthorized": "Unauthorized access."
+  }
+}

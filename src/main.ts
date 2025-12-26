@@ -1,12 +1,20 @@
+/**
+ * Main Application Entry Point
+ *
+ * Bootstraps the NestJS application, sets up global pipes (Validation),
+ * Swagger documentation, and CORS configuration.
+ */
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module";
+import { ResponseInterceptor } from "./common/interceptors/response.interceptor";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
+  // Global Interceptor and Filter are now registered in AppModule
 
   // Enable CORS for frontend at http://localhost:3001
   app.enableCors({

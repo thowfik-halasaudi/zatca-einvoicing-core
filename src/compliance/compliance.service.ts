@@ -1,3 +1,10 @@
+/**
+ * Compliance Service
+ *
+ * The "Brain" of the ZATCA integration.
+ * Orchestrates high-level onboarding flows, CSR generation, and submission logic.
+ * Delegates database operations to ComplianceRepository.
+ */
 import {
   Injectable,
   Logger,
@@ -11,8 +18,8 @@ import { CheckComplianceDto } from "./dto/check-compliance.dto";
 import { SubmitZatcaDto } from "./dto/submit-zatca.dto";
 import { ZatcaClientService } from "../zatca/zatca-client.service";
 import { FileManagerService } from "../common/file-manager.service";
-import { PrismaService } from "../prisma/prisma.service";
-import * as path from "path";
+import { ComplianceRepository } from "./compliance.repository"; // ✅ Repository
+import { InvoiceRepository } from "../invoice/invoice.repository"; // ✅ Repository
 import { Prisma } from "@prisma/client";
 
 /**
@@ -33,7 +40,8 @@ export class ComplianceService {
     private readonly cryptoCli: CryptoCliService,
     private readonly zatcaClient: ZatcaClientService,
     private readonly fileManager: FileManagerService,
-    private readonly prisma: PrismaService
+    private readonly complianceRepo: ComplianceRepository, // ✅ Injected Repo
+    private readonly invoiceRepo: InvoiceRepository // ✅ Injected Repo
   ) {}
 
   /**
@@ -70,9 +78,9 @@ export class ComplianceService {
      * 1️⃣b CHECK IF ALREADY EXISTS (RESTRICTION)
      * ==================================================
      */
-    const existingUnit = await this.prisma.egsUnit.findUnique({
-      where: { commonName: dto.commonName },
-    });
+    const existingUnit = await this.complianceRepo.findByCommonName(
+      dto.commonName
+    );
 
     if (existingUnit) {
       throw new BadRequestException(
@@ -141,9 +149,7 @@ export class ComplianceService {
      */
 
     try {
-      await this.prisma.egsUnit.create({
-        data: createData,
-      });
+      await this.complianceRepo.createEgsUnit(createData);
     } catch (e) {
       throw e;
     }
@@ -172,9 +178,7 @@ export class ComplianceService {
    * to ZATCA. The resulting CSID is what allows the system to sign and report invoices.
    */
   async issueCsid(dto: IssueCsidDto) {
-    const egsUnit = await this.prisma.egsUnit.findUnique({
-      where: { commonName: dto.commonName },
-    });
+    const egsUnit = await this.complianceRepo.findByCommonName(dto.commonName);
 
     if (!egsUnit || !egsUnit.csr) {
       throw new NotFoundException(
@@ -217,18 +221,15 @@ export class ComplianceService {
 
     try {
       // Step 3: Persist COMPLIANCE Credentials
-      await this.prisma.egsUnit.update({
-        where: { commonName },
-        data: {
-          complianceBinarySecurityToken: issuedData.binarySecurityToken,
-          complianceSecret: issuedData.secret,
-          complianceRequestId: issuedData.requestID?.toString(),
+      await this.complianceRepo.updateEgsUnit(commonName, {
+        complianceBinarySecurityToken: issuedData.binarySecurityToken,
+        complianceSecret: issuedData.secret,
+        complianceRequestId: issuedData.requestID?.toString(),
 
-          // Legacy/Fallback: Also update main fields so step 3+4 works before Production CSID
-          binarySecurityToken: issuedData.binarySecurityToken,
-          secret: issuedData.secret,
-          requestId: issuedData.requestID?.toString(),
-        },
+        // Legacy/Fallback: Also update main fields so step 3+4 works before Production CSID
+        binarySecurityToken: issuedData.binarySecurityToken,
+        secret: issuedData.secret,
+        requestId: issuedData.requestID?.toString(),
       });
     } catch (e) {
       throw e;
@@ -253,9 +254,7 @@ export class ComplianceService {
     const { commonName, production } = dto;
 
     // 1. Get EgsUnit
-    const egsUnit = await this.prisma.egsUnit.findUnique({
-      where: { commonName },
-    });
+    const egsUnit = await this.complianceRepo.findByCommonName(commonName);
 
     if (!egsUnit) {
       throw new NotFoundException(`EGS Unit ${commonName} not found.`);
@@ -294,18 +293,15 @@ export class ComplianceService {
     // 4. Persist Production Credentials
     // At this point, the EGS is FULLY ONBOARDED.
     // We update the "Active" fields (binarySecurityToken/secret) to use the Production ones.
-    await this.prisma.egsUnit.update({
-      where: { commonName },
-      data: {
-        productionBinarySecurityToken: result.binarySecurityToken,
-        productionSecret: result.secret,
-        productionRequestId: result.requestID?.toString(),
+    await this.complianceRepo.updateEgsUnit(commonName, {
+      productionBinarySecurityToken: result.binarySecurityToken,
+      productionSecret: result.secret,
+      productionRequestId: result.requestID?.toString(),
 
-        // OVERWRITE Active Credentials with Production ones
-        binarySecurityToken: result.binarySecurityToken,
-        secret: result.secret,
-        requestId: result.requestID?.toString(),
-      },
+      // OVERWRITE Active Credentials with Production ones
+      binarySecurityToken: result.binarySecurityToken,
+      secret: result.secret,
+      requestId: result.requestID?.toString(),
     });
 
     return {
@@ -324,11 +320,9 @@ export class ComplianceService {
   async checkInvoiceCompliance(dto: CheckComplianceDto) {
     const { commonName, invoiceSerialNumber } = dto;
 
-    // 1. Load Invoice from Database
-    const invoice = await this.prisma.invoice.findUnique({
-      where: { invoiceNumber: invoiceSerialNumber },
-      include: { hash: true },
-    });
+    // 1. Load Invoice from Repository
+    const invoice =
+      await this.invoiceRepo.findByInvoiceNumber(invoiceSerialNumber);
 
     if (!invoice) {
       throw new NotFoundException(
@@ -343,9 +337,7 @@ export class ComplianceService {
     }
 
     // 2. Load Security Tokens
-    const egsUnit = await this.prisma.egsUnit.findUnique({
-      where: { commonName },
-    });
+    const egsUnit = await this.complianceRepo.findByCommonName(commonName);
 
     if (!egsUnit || !egsUnit.binarySecurityToken || !egsUnit.secret) {
       throw new NotFoundException(
@@ -357,8 +349,7 @@ export class ComplianceService {
     const secret = egsUnit.secret.trim();
 
     // 3. Prepare Data
-    // We trust our DB metadata, but we can also re-extract if needed.
-    // Using DB metadata is faster and safer.
+    // we use invoice.hash which is retrieved by findByInvoiceNumber via include
     const uuid = invoice.uuid;
     const invoiceHash = invoice.hash?.currentInvoiceHash;
 
@@ -416,10 +407,8 @@ export class ComplianceService {
     console.log("[SUBMIT_TO_ZATCA] Production Mode:", isProduction);
 
     // 1. Load Invoice
-    const invoice = await this.prisma.invoice.findUnique({
-      where: { invoiceNumber: invoiceSerialNumber },
-      include: { hash: true },
-    });
+    const invoice =
+      await this.invoiceRepo.findByInvoiceNumber(invoiceSerialNumber);
 
     if (!invoice || !invoice.signedXml || !invoice.hash?.currentInvoiceHash) {
       console.error("[SUBMIT_TO_ZATCA] Invoice not found or missing data");
@@ -440,9 +429,7 @@ export class ComplianceService {
     );
 
     // 2. Load Tokens
-    const egsUnit = await this.prisma.egsUnit.findUnique({
-      where: { commonName },
-    });
+    const egsUnit = await this.complianceRepo.findByCommonName(commonName);
 
     if (!egsUnit || !egsUnit.binarySecurityToken || !egsUnit.secret) {
       throw new NotFoundException(
@@ -518,7 +505,7 @@ export class ComplianceService {
       result.validationResults?.warningMessages?.length || 0
     );
 
-    // 5. Update Persistence using shared logic
+    // 5. Update Persistence using shared logic (via Repo)
     const overallStatus = await this.updateSubmissionStatus(
       invoice.id,
       result,
@@ -557,33 +544,15 @@ export class ComplianceService {
       overallStatus = isStandard ? "CLEARED" : "REPORTED";
     }
 
-    await this.prisma.$transaction([
-      this.prisma.zatcaSubmission.upsert({
-        where: { invoiceId },
-        create: {
-          invoiceId,
-          submissionType,
-          zatcaStatus: overallStatus,
-          reportingStatus,
-          clearanceStatus,
-          zatcaResponse: result as any,
-          lastAttemptAt: new Date(),
-          attemptCount: 1,
-        },
-        update: {
-          zatcaStatus: overallStatus,
-          reportingStatus,
-          clearanceStatus,
-          zatcaResponse: result as any,
-          attemptCount: { increment: 1 },
-          lastAttemptAt: new Date(),
-        },
-      }),
-      this.prisma.invoice.update({
-        where: { id: invoiceId },
-        data: { status: overallStatus },
-      }),
-    ]);
+    // Call Repository to handle logic
+    await this.complianceRepo.updateSubmissionStatus(
+      invoiceId,
+      submissionType,
+      overallStatus,
+      reportingStatus,
+      clearanceStatus,
+      result as any
+    );
 
     return overallStatus;
   }
@@ -629,20 +598,8 @@ export class ComplianceService {
   async listOnboardedEgs(commonName?: string) {
     const whereClause = commonName ? { commonName } : {};
 
-    const units = await this.prisma.egsUnit.findMany({
-      where: whereClause,
-      orderBy: { commonName: "asc" },
-      select: {
-        commonName: true,
-        organizationName: true,
-        organizationIdentifier: true,
-        binarySecurityToken: true,
-        countryName: true,
-        production: true,
-        complianceBinarySecurityToken: true,
-        productionBinarySecurityToken: true,
-      },
-    });
+    // Use Repository
+    const units = await this.complianceRepo.findAllEgsUnits(whereClause);
 
     return units.map((u) => {
       // Determine Status
@@ -691,16 +648,13 @@ export class ComplianceService {
   async revokeEgs(commonName: string) {
     // Implementation depends on ZATCA Revocation API availability.
     // Often, you just delete the keys locally.
-    await this.prisma.egsUnit.update({
-      where: { commonName },
-      data: {
-        binarySecurityToken: null,
-        secret: null,
-        productionBinarySecurityToken: null,
-        productionSecret: null,
-        complianceBinarySecurityToken: null,
-        complianceSecret: null,
-      },
+    await this.complianceRepo.updateEgsUnit(commonName, {
+      binarySecurityToken: null,
+      secret: null,
+      productionBinarySecurityToken: null,
+      productionSecret: null,
+      complianceBinarySecurityToken: null,
+      complianceSecret: null,
     });
     return {
       message:

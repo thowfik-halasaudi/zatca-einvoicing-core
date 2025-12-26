@@ -4,7 +4,8 @@ import { CryptographyModule } from "../cryptography/cryptography.module";
 import { ComplianceController } from "./compliance.controller";
 import { ZatcaModule } from "../zatca/zatca.module";
 import { CommonModule } from "../common/common.module";
-import { PrismaModule } from "../prisma/prisma.module";
+import { ComplianceRepository } from "./compliance.repository";
+import { InvoiceModule } from "../invoice/invoice.module"; // For InvoiceRepository
 
 /**
  * Compliance Module
@@ -12,9 +13,9 @@ import { PrismaModule } from "../prisma/prisma.module";
  * Handles ZATCA compliance operations (onboarding)
  */
 @Module({
-  imports: [PrismaModule, CryptographyModule, ZatcaModule, CommonModule],
+  imports: [CryptographyModule, ZatcaModule, CommonModule, InvoiceModule],
   controllers: [ComplianceController],
-  providers: [ComplianceService],
+  providers: [ComplianceService, ComplianceRepository],
   exports: [ComplianceService],
 })
 export class ComplianceModule {}

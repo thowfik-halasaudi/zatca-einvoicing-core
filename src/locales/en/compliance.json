@@ -1,0 +1,8 @@
+{
+  "egs_list_success": "EGS units retrieved successfully.",
+  "onboard_success": "EGS onboarded and CSID issued successfully.",
+  "csid_issued_success": "CSID issued successfully.",
+  "production_csid_success": "Production CSID issued successfully.",
+  "check_success": "Compliance check completed successfully.",
+  "submission_success": "Invoice submitted to ZATCA successfully."
+}

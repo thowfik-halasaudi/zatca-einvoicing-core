@@ -1,10 +1,18 @@
-import { Body, Controller, Get, Post, Query } from "@nestjs/common";
+/**
+ * Compliance Controller
+ *
+ * Handles ZATCA onboarding steps (CSR generation, CSID issuance, Compliance Checks).
+ * Acts as the primary interface for users to onboard their EGS units.
+ */
+import { Body, Controller, Get, Post, Query, Req } from "@nestjs/common";
+import { Request } from "express";
 import { ComplianceService } from "./compliance.service";
 import { ApiTags, ApiOperation, ApiResponse } from "@nestjs/swagger";
 import { OnboardEgsDto } from "./dto/onboard-egs.dto";
 import { IssueCsidDto } from "./dto/issue-csid.dto";
 import { CheckComplianceDto } from "./dto/check-compliance.dto";
 import { SubmitZatcaDto } from "./dto/submit-zatca.dto";
+import { apiResponse } from "src/common/utils/api-response";
 
 /**
  * ComplianceController
@@ -33,8 +41,14 @@ export class ComplianceController {
     status: 200,
     description: "List of EGS units retrieved successfully",
   })
-  async listEgs(@Query("commonName") commonName?: string) {
-    return this.complianceService.listOnboardedEgs(commonName);
+  async listEgs(@Query("commonName") commonName: string, @Req() req: Request) {
+    const result = await this.complianceService.listOnboardedEgs(commonName);
+    return apiResponse({
+      key: "compliance.egs_list_success",
+      request: req,
+      status: "SUCCESS",
+      data: result,
+    });
   }
 
   /**
@@ -49,8 +63,14 @@ export class ComplianceController {
     status: 201,
     description: "CSID issued successfully",
   })
-  async onboard(@Body() dto: OnboardEgsDto) {
-    return this.complianceService.onboardEgs(dto);
+  async onboard(@Body() dto: OnboardEgsDto, @Req() req: Request) {
+    const result = await this.complianceService.onboardEgs(dto);
+    return apiResponse({
+      key: "compliance.onboard_success",
+      request: req,
+      status: "CREATED",
+      data: result,
+    });
   }
 
   /**
@@ -64,8 +84,14 @@ export class ComplianceController {
     status: 201,
     description: "CSID issued successfully using existing CSR",
   })
-  async issueCsid(@Body() dto: IssueCsidDto) {
-    return this.complianceService.issueCsid(dto);
+  async issueCsid(@Body() dto: IssueCsidDto, @Req() req: Request) {
+    const result = await this.complianceService.issueCsid(dto);
+    return apiResponse({
+      key: "compliance.csid_issued_success",
+      request: req,
+      status: "CREATED",
+      data: result,
+    });
   }
 
   /**
@@ -81,9 +107,16 @@ export class ComplianceController {
     description: "Production CSID issued and stored. EGS is now live.",
   })
   async issueProductionCsid(
-    @Body() dto: { commonName: string; production?: boolean }
+    @Body() dto: { commonName: string; production?: boolean },
+    @Req() req: Request
   ) {
-    return this.complianceService.issueProductionCsid(dto);
+    const result = await this.complianceService.issueProductionCsid(dto);
+    return apiResponse({
+      key: "compliance.production_csid_success",
+      request: req,
+      status: "CREATED",
+      data: result,
+    });
   }
 
   /**
@@ -98,8 +131,14 @@ export class ComplianceController {
     status: 200,
     description: "Compliance check results received",
   })
-  async check(@Body() dto: CheckComplianceDto) {
-    return this.complianceService.checkInvoiceCompliance(dto);
+  async check(@Body() dto: CheckComplianceDto, @Req() req: Request) {
+    const result = await this.complianceService.checkInvoiceCompliance(dto);
+    return apiResponse({
+      key: "compliance.check_success",
+      request: req,
+      status: "SUCCESS",
+      data: result,
+    });
   }
 
   /**
@@ -114,7 +153,13 @@ export class ComplianceController {
     status: 200,
     description: "Invoice submitted successfully",
   })
-  async submit(@Body() dto: SubmitZatcaDto) {
-    return this.complianceService.submitToZatca(dto);
+  async submit(@Body() dto: SubmitZatcaDto, @Req() req: Request) {
+    const result = await this.complianceService.submitToZatca(dto);
+    return apiResponse({
+      key: "compliance.submission_success",
+      request: req,
+      status: "SUCCESS",
+      data: result,
+    });
   }
 }
