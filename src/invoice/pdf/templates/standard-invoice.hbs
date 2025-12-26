@@ -1,0 +1,469 @@
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>{{invoiceTitleEn}}</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 10mm;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Arial", sans-serif;
+        font-size: 9pt;
+        color: #000;
+        line-height: 1.35;
+      }
+      .container {
+        width: 100%;
+        border: 2px solid #ccc;
+        padding: 10px;
+        border-radius: 5px;
+      }
+
+      /* --- Header --- */
+      .main-header-title {
+        text-align: center;
+        margin-bottom: 20px;
+        font-size: 14pt;
+        font-weight: bold;
+      }
+      .top-meta-grid {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 20px;
+      }
+      .meta-col-left {
+        width: 35%;
+      }
+      .meta-col-center {
+        width: 30%;
+        text-align: center;
+      }
+      .meta-col-right {
+        width: 35%;
+        text-align: right;
+        direction: rtl;
+      }
+
+      .meta-row {
+        margin-bottom: 6px;
+      }
+      .meta-label {
+        font-weight: bold;
+        font-size: 8pt;
+        display: block;
+      }
+      .meta-val {
+        font-weight: bold;
+        font-size: 9pt;
+      }
+
+      .qr-code {
+        width: 120px;
+        height: 120px;
+      }
+
+      /* --- Section Styling (Seller/Buyer) --- */
+      .section-box {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+      }
+      .section-header {
+        display: flex;
+        justify-content: space-between;
+        font-weight: bold;
+        font-size: 9pt;
+        margin-bottom: 10px;
+      }
+
+      /* Form Layout */
+      .form-row {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .form-col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+      .field-label-group {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 3px;
+      }
+      .f-lbl {
+        font-size: 7pt;
+        font-weight: bold;
+      }
+      .f-input {
+        background-color: #f9f9f9;
+        border: 1px solid #ddd;
+        padding: 7px 9px;
+        min-height: 26px;
+        font-size: 8.5pt;
+        border-radius: 3px;
+        font-weight: 600;
+      }
+
+      /* --- Table --- */
+      .items-section-container {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 15px;
+        margin-top: 20px;
+      }
+      .items-header-bar {
+        display: flex;
+        justify-content: space-between;
+        font-weight: bold;
+        font-size: 9pt;
+        margin-bottom: 12px;
+      }
+      .items-table {
+        width: 100%;
+        border-collapse: separate; /* Changed to allow border-radius */
+        border-spacing: 0;
+        font-size: 9pt;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .items-table th {
+        padding: 10px 8px;
+        text-align: center;
+        font-weight: bold;
+        font-size: 8pt;
+        line-height: 1.3;
+        border-right: 1px solid #ddd;
+        border-bottom: 1px solid #ddd;
+        background-color: #f5f5f5;
+        vertical-align: middle;
+      }
+      .items-table th:last-child {
+        border-right: none;
+      }
+      .items-table td {
+        padding: 12px 8px;
+        text-align: center;
+        border-right: 1px solid #ddd;
+        border-bottom: 1px solid #ddd;
+        vertical-align: middle;
+        font-weight: 600;
+        font-size: 9pt;
+        line-height: 1.3;
+      }
+      .items-table td:last-child {
+        border-right: none;
+      }
+      .items-table tr:last-child td {
+        border-bottom: none;
+      }
+      .items-table td.desc {
+        text-align: center;
+      }
+
+      /* --- Totals & Footer --- */
+      .totals-block {
+        width: 60%;
+        margin-left: auto;
+        margin-top: 20px;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .total-row {
+        display: flex;
+        border-bottom: 1px solid #ddd;
+        min-height: 40px;
+      }
+      .total-row:last-child {
+        border-bottom: none;
+        background-color: #f0f9ff;
+      }
+      .total-label-cell {
+        flex: 2;
+        background-color: #f9fafb;
+        padding: 8px 15px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 8pt;
+        text-align: right;
+      }
+      .total-value-cell {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 10pt;
+        border-left: 1px solid #ddd;
+        background-color: #fff;
+      }
+      .total-row:last-child .total-value-cell {
+        background-color: #f0f9ff;
+        color: #0284c7;
+      }
+    </style>
+  </head>
+  <body>
+
+    <div class="container">
+
+      <!-- Main Title -->
+      <div class="main-header-title">
+        {{invoiceTitleEn}}
+        <span style="margin: 0 10px;">|</span>
+        {{invoiceTitleAr}}
+      </div>
+
+      <!-- Top Meta Data -->
+      <div class="top-meta-grid">
+        <div class="meta-col-left">
+          <div class="meta-row"><span class="meta-label">Invoice Ref:</span>
+            <span class="meta-val">{{invoiceNumber}}</span></div>
+          <div class="meta-row"><span class="meta-label">Issue Date:</span>
+            <span class="meta-val">{{issueDate}}</span></div>
+          <div class="meta-row"><span class="meta-label">Issue Time:</span>
+            <span class="meta-val">{{issueTime}}</span></div>
+        </div>
+        <div class="meta-col-center">
+          {{#if qrCode}}
+            <img src="{{qrCode}}" class="qr-code" />
+          {{/if}}
+        </div>
+        <div class="meta-col-right">
+          <div class="meta-row"><span class="meta-label">الرقم التسلسلي:</span>
+            <span class="meta-val">{{invoiceNumber}}</span></div>
+          <div class="meta-row"><span class="meta-label">تاريخ الإصدار:</span>
+            <span class="meta-val">{{issueDate}}</span></div>
+          <div class="meta-row"><span class="meta-label">وقت الإصدار:</span>
+            <span class="meta-val">{{issueTime}}</span></div>
+        </div>
+      </div>
+
+      <!-- SELLER IDENTIFICATION -->
+      <div class="section-box">
+        <div class="section-header">
+          <span>Seller Identification</span>
+          <span>هوية المورد</span>
+        </div>
+        <!-- Name & VAT -->
+        <div class="form-row">
+          <div class="form-col" style="flex: 2;">
+            <div class="field-label-group"><span class="f-lbl">Seller Name</span><span
+                class="f-lbl"
+              >اسم المورد</span></div>
+            <div class="f-input">{{sellerName}} | {{sellerNameAr}}</div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="field-label-group"><span class="f-lbl">VAT Registration
+                Number</span><span class="f-lbl">رقم تسجيل ضريبة القيمة المضافة</span></div>
+            <div class="f-input">{{sellerVatNumber}}</div>
+          </div>
+        </div>
+        <!-- Address Grid -->
+        <div class="form-row">
+          <div class="form-col" style="flex: 4;">
+            <div class="field-label-group"><span class="f-lbl">Street Name</span><span
+                class="f-lbl"
+              >اسم الشارع</span></div>
+            <div class="f-input">{{sellerAddress.street}}</div>
+          </div>
+          <div class="form-col" style="flex: 1;">
+            <div class="field-label-group"><span class="f-lbl">Building No.</span><span
+                class="f-lbl"
+              >رقم المبنى</span></div>
+            <div class="f-input">{{sellerAddress.buildingNumber}}</div>
+          </div>
+          <div class="form-col" style="flex: 2;">
+            <div class="field-label-group"><span class="f-lbl">City</span><span
+                class="f-lbl"
+              >المدينة</span></div>
+            <div class="f-input">{{sellerAddress.city}}</div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-col" style="flex: 2;">
+            <div class="field-label-group"><span
+                class="f-lbl"
+              >District</span><span class="f-lbl">الحي</span></div>
+            <div class="f-input">{{sellerAddress.district}}</div>
+          </div>
+          <div class="form-col" style="flex: 1;">
+            <div class="field-label-group"><span class="f-lbl">Country Code</span><span
+                class="f-lbl"
+              >رمز الدولة</span></div>
+            <div class="f-input">{{sellerAddress.countryCode}}</div>
+          </div>
+          <div class="form-col" style="flex: 1;">
+            <div class="field-label-group"><span class="f-lbl">Postal Code</span><span
+                class="f-lbl"
+              >الرمز البريدي</span></div>
+            <div class="f-input">{{sellerAddress.postalCode}}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BUYER IDENTIFICATION -->
+      <div class="section-box">
+        <div class="section-header">
+          <span>Buyer Identification</span>
+          <span>هوية العميل</span>
+        </div>
+        <div class="form-row">
+          <div class="form-col" style="flex: 2;">
+            <div class="field-label-group"><span class="f-lbl">Buyer Name</span><span
+                class="f-lbl"
+              >اسم العميل</span></div>
+            <div class="f-input">{{buyerName}} | {{buyerNameAr}}</div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <div class="field-label-group"><span class="f-lbl">VAT Registration
+                Number</span><span class="f-lbl">رقم تسجيل ضريبة القيمة المضافة</span></div>
+            <div class="f-input">{{buyerVatNumber}}</div>
+          </div>
+        </div>
+        <!-- Address Grid -->
+        <div class="form-row">
+          <div class="form-col" style="flex: 4;">
+            <div class="field-label-group"><span class="f-lbl">Street Name</span><span
+                class="f-lbl"
+              >اسم الشارع</span></div>
+            <div class="f-input">{{buyerAddress.street}}</div>
+          </div>
+          <div class="form-col" style="flex: 1;">
+            <div class="field-label-group"><span class="f-lbl">Building No.</span><span
+                class="f-lbl"
+              >رقم المبنى</span></div>
+            <div class="f-input">{{buyerAddress.buildingNumber}}</div>
+          </div>
+          <div class="form-col" style="flex: 2;">
+            <div class="field-label-group"><span class="f-lbl">City</span><span
+                class="f-lbl"
+              >المدينة</span></div>
+            <div class="f-input">{{buyerAddress.city}}</div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-col" style="flex: 2;">
+            <div class="field-label-group"><span
+                class="f-lbl"
+              >District</span><span class="f-lbl">الحي</span></div>
+            <div class="f-input">{{buyerAddress.district}}</div>
+          </div>
+          <div class="form-col" style="flex: 1;">
+            <div class="field-label-group"><span class="f-lbl">Country Code</span><span
+                class="f-lbl"
+              >رمز الدولة</span></div>
+            <div class="f-input">{{buyerAddress.countryCode}}</div>
+          </div>
+          <div class="form-col" style="flex: 1;">
+            <div class="field-label-group"><span class="f-lbl">Postal Code</span><span
+                class="f-lbl"
+              >الرمز البريدي</span></div>
+            <div class="f-input">{{buyerAddress.postalCode}}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LINE ITEMS -->
+      <div class="items-section-container">
+        <div class="items-header-bar">
+          <span>Line Items</span>
+          <span>معلومات وبيانات السلعة أو الخدمة</span>
+        </div>
+
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th width="30%">وصف السلعة أو الخدمة
+                <br />
+                Goods / Service Description</th>
+              <th width="8%">الكمية <br /> Qty</th>
+              <th width="12%">سعر الوحدة <br /> Unit Price</th>
+              <!-- Optional: Discount col -->
+              <th width="12%">المبلغ الخاضع للضريبة <br /> Taxable Amount</th>
+              <th width="8%">نسبة الضريبة <br /> VAT %</th>
+              <th width="12%">مبلغ الضريبة <br /> VAT Amount</th>
+              <th width="18%">المجموع شامل الضريبة
+                <br />
+                Item Subtotal (Inc VAT)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#each items}}
+              <tr>
+                <td class="desc" style="font-weight: bold;">{{description}}</td>
+                <td>{{quantity}}</td>
+                <td>{{unitPrice}}</td>
+                <td>{{taxExclusiveAmount}}</td>
+                <!-- Pre-calculated in controller usually unit*qty -->
+                <td>{{vatRate}}%</td>
+                <td>{{vatAmount}}</td>
+                <td>{{totalAmount}}</td>
+              </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- TOTALS -->
+      <div class="totals-block">
+        <div class="total-row">
+          <div class="total-label-cell">
+            <span style="direction:rtl;">المبلغ الخاضع للضريبة (غير شامل ضريبة
+              القيمة المضافة)</span>
+            <span>Invoice Taxable Amount</span>
+          </div>
+          <div class="total-value-cell">{{subTotal}} SAR</div>
+        </div>
+        <div class="total-row">
+          <div class="total-label-cell">
+            <span style="direction:rtl;">اجمالي مبلغ ضريبة القيمة المضافة</span>
+            <span>VAT Total Amount</span>
+          </div>
+          <div class="total-value-cell">{{vatAmount}} SAR</div>
+        </div>
+        <div class="total-row">
+          <div class="total-label-cell">
+            <span style="direction:rtl;">إجمالي قيمة الفاتورة (شامل ضريبة القيمة
+              المضافة)</span>
+            <span>Invoice Gross Total (Inclusive of VAT)</span>
+          </div>
+          <div class="total-value-cell">{{totalAmount}} SAR</div>
+        </div>
+      </div>
+
+      <!-- Footer / References -->
+      {{#if billingReference}}
+        <div class="bottom-box">
+          <div class="bottom-box-title">
+            <span>Reference / المرجع</span>
+            <span>Original Invoice: {{billingReference}}</span>
+          </div>
+          <div style="font-size: 8pt; color: #555;">
+            Referencing original invoice for Credit/Debit note issuance.
+          </div>
+        </div>
+      {{/if}}
+
+    </div>
+
+  </body>
+</html>

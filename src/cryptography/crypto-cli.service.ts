@@ -124,10 +124,19 @@ export class CryptoCliService {
     organizationName: string;
     countryName: string;
     invoiceType: string;
-    locationAddress: string;
+    locationAddress?: string; // Made optional
+    street?: string;
+    buildingNumber?: string;
+    city?: string;
+    district?: string;
+    postalCode?: string;
     industryBusinessCategory: string;
     production: boolean;
   }): string {
+    // Construct simplified location string for CSR if raw locationAddress not provided,
+    // though ZATCA CSR usually only needs a simple "Riyadh" or similar for location.
+    // We'll prioritize the explicity locationAddress if present (legacy), otherwise just use City.
+    const effectiveLocation = config.locationAddress || config.city || "Riyadh";
     // Fatoora CLI requires .properties format
     // Key names must exactly match ZATCA sample properties
     return [
@@ -138,7 +147,7 @@ export class CryptoCliService {
       `csr.organization.name=${config.organizationName}`,
       `csr.country.name=${config.countryName}`,
       `csr.invoice.type=${config.invoiceType}`,
-      `csr.location.address=${config.locationAddress}`,
+      `csr.location.address=${effectiveLocation}`,
       `csr.industry.business.category=${config.industryBusinessCategory}`,
       `csr.template.name=${config.production ? "ZATCA-Code-Signing" : "TSTZATCA-Code-Signing"}`,
     ].join("\n");

@@ -118,7 +118,13 @@ export class ComplianceService {
       organizationName: dto.organizationName,
       countryName: dto.countryName,
       invoiceType: String(dto.invoiceType),
-      locationAddress: dto.locationAddress,
+      // Address fields - Map from DTO with defaults
+      street: dto.street || "Unknown",
+      buildingNumber: dto.buildingNumber || "0000",
+      city: dto.city || "Riyadh",
+      district: dto.district || "District",
+      postalCode: dto.postalCode || "00000",
+      countryCode: "SA", // Default to SA as implicit in this context
       industryBusinessCategory: dto.industryBusinessCategory,
       production: Boolean(dto.production),
       propertyId: dto.propertyId,

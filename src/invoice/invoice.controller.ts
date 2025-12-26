@@ -52,7 +52,9 @@ export class InvoiceController {
     @Param("invoiceNumber") invoiceNumber: string,
     @Res() res: Response
   ) {
-    const invoice = await this.invoiceService.getInvoiceByNumber(invoiceNumber);
+    // Cast to any to avoid stale IDE type errors (schema was updated but IDE is caching old types)
+    const invoice: any =
+      await this.invoiceService.getInvoiceByNumber(invoiceNumber);
 
     // Generate QR Code Image from TLV Base64
     let qrCodeBase64 = null;
@@ -94,21 +96,55 @@ export class InvoiceController {
       }),
       qrCode: qrCodeBase64,
 
-      // English versions
+      // Pass raw type info so PdfService can determine template & titles
+      invoiceTypeCode: invoice.invoiceTypeCode,
+      invoiceTypeCodeName: invoice.invoiceTypeCodeName,
+      invoiceCategory: invoice.invoiceCategory,
+
+      // Extra Fields for Credit/Debit/Advance
+      billingReference: invoice.referenceInvoiceNumber,
       sellerName: invoice.sellerName,
       sellerVatNumber: invoice.sellerVatNumber,
-      sellerAddress: invoice.sellerAddress,
+      sellerAddress: {
+        street: invoice.sellerStreet || "Unknown Street",
+        buildingNumber: invoice.sellerBuildingNumber || "-",
+        city: invoice.sellerCity || "Riyadh",
+        district: invoice.sellerDistrict || "-",
+        postalCode: invoice.sellerPostalCode || "-",
+        countryCode: invoice.sellerCountryCode || "SA",
+      },
       buyerName: invoice.buyerName || "N/A",
       buyerVatNumber: invoice.buyerVatNumber || "N/A",
-      buyerAddress: invoice.buyerAddress || "N/A",
+      buyerAddress: {
+        street: invoice.buyerStreet || "-",
+        buildingNumber: invoice.buyerBuildingNumber || "-",
+        city: invoice.buyerCity || "-",
+        district: invoice.buyerDistrict || "-",
+        postalCode: invoice.buyerPostalCode || "-",
+        countryCode: invoice.buyerCountryCode || "-",
+      },
 
       // Arabic versions (using English for now - TODO: Add proper translation)
       sellerNameAr: invoice.sellerName,
       sellerVatNumberAr: invoice.sellerVatNumber,
-      sellerAddressAr: invoice.sellerAddress,
+      sellerAddressAr: {
+        street: invoice.sellerStreet || "Unknown Street",
+        buildingNumber: invoice.sellerBuildingNumber || "-",
+        city: invoice.sellerCity || "Riyadh",
+        district: invoice.sellerDistrict || "-",
+        postalCode: invoice.sellerPostalCode || "-",
+        countryCode: invoice.sellerCountryCode || "SA",
+      },
       buyerNameAr: invoice.buyerName || "N/A",
       buyerVatNumberAr: invoice.buyerVatNumber || "N/A",
-      buyerAddressAr: invoice.buyerAddress || "N/A",
+      buyerAddressAr: {
+        street: invoice.buyerStreet || "-",
+        buildingNumber: invoice.buyerBuildingNumber || "-",
+        city: invoice.buyerCity || "-",
+        district: invoice.buyerDistrict || "-",
+        postalCode: invoice.buyerPostalCode || "-",
+        countryCode: invoice.buyerCountryCode || "-",
+      },
       items: invoice.items.map((item) => ({
         description: item.description,
         quantity: item.quantity,

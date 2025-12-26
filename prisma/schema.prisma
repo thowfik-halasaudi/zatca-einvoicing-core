@@ -31,12 +31,22 @@ model Invoice {
   // Seller
   sellerName             String
   sellerVatNumber        String
-  sellerAddress          String
+  sellerStreet           String    @default("Unknown")
+  sellerBuildingNumber   String    @default("0000")
+  sellerCity             String    @default("Riyadh")
+  sellerDistrict         String    @default("District")
+  sellerCountryCode      String    @default("SA")
+  sellerPostalCode       String    @default("00000")
   
   // Buyer
   buyerName              String?
   buyerVatNumber         String?
-  buyerAddress           String?
+  buyerStreet            String?
+  buyerBuildingNumber    String?
+  buyerCity              String?
+  buyerDistrict          String?
+  buyerCountryCode       String?
+  buyerPostalCode        String?
   
   // References (for Credit/Debit Notes)
   referenceInvoiceNumber String?
@@ -128,7 +138,13 @@ model EgsUnit {
   organizationName          String
   countryName               String
   invoiceType               String
-  locationAddress           String
+  // Detailed Address Fields
+  street                 String    @default("Unknown")
+  buildingNumber         String    @default("0000")
+  city                   String    @default("Riyadh")
+  district               String    @default("District")
+  postalCode             String    @default("00000")
+  countryCode            String    @default("SA")
   industryBusinessCategory  String
   production                Boolean   @default(false)
 

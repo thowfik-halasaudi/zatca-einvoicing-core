@@ -34,9 +34,55 @@ export class OnboardEgsDto {
   @IsNotEmpty()
   invoiceType: string;
 
+  // Detailed Address
+  // Detailed Address Fields (Optional for now to support old clients, but preferred)
   @IsString()
-  @IsNotEmpty()
-  locationAddress: string;
+  @IsOptional()
+  street?: string;
+
+  @IsString()
+  @IsOptional()
+  buildingNumber?: string;
+
+  @IsString()
+  @IsOptional()
+  city?: string;
+
+  @IsString()
+  @IsOptional()
+  district?: string;
+
+  @IsString()
+  @IsOptional()
+  postalCode?: string;
+
+  // Keep locationAddress for legacy/CLI compatibility just in case, but it won't be saved to DB directly
+  @IsString()
+  @IsOptional()
+  locationAddress?: string;
+
+  /*
+  // Detailed address components we want to store
+  @IsString()
+  @IsOptional()
+  street?: string = "Unknown";
+
+  @IsString()
+  @IsOptional()
+  buildingNumber?: string = "0000";
+
+  @IsString()
+  @IsOptional()
+  city?: string = "Riyadh";
+
+  @IsString()
+  @IsOptional()
+  district?: string = "District";
+
+  @IsString()
+  @IsOptional()
+  postalCode?: string = "00000";
+  */
 
   @IsString()
   @IsNotEmpty()

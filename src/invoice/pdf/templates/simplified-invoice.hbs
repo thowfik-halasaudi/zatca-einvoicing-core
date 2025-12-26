@@ -1,0 +1,392 @@
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>{{invoiceTitleEn}}</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 8mm;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Arial", sans-serif;
+        font-size: 9pt;
+        color: #000;
+        line-height: 1.3;
+      }
+      .invoice-container {
+        border: 1px solid #ccc; /* Lighter, thinner border */
+        border-radius: 12px; /* Softer corners */
+        padding: 15px;
+      }
+
+      /* Header */
+      .invoice-header {
+        text-align: center;
+        font-size: 13pt;
+        font-weight: bold;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e5e5e5; /* Very light border */
+      }
+      .invoice-header .ar-title {
+        font-size: 12pt;
+        margin-top: 3px;
+      }
+
+      /* Top Meta Section */
+      .top-section {
+        display: flex;
+        justify-content: space-between;
+        align-items: center; /* Vertically center all content */
+        margin-bottom: 20px;
+        background: #f5f5f5; /* Gray background like reference */
+        padding: 15px;
+        border-radius: 8px; /* Consistent rounded corners */
+      }
+      .invoice-info {
+        width: 30%;
+      }
+      .qr-section {
+        width: 35%;
+        text-align: center;
+      }
+      .qr-code {
+        width: 120px; /* Slightly smaller */
+        height: 120px;
+      }
+      .invoice-info-ar {
+        width: 30%;
+        text-align: right;
+        direction: rtl;
+      }
+      .info-field {
+        margin-bottom: 8px;
+      }
+      .info-label {
+        font-weight: bold;
+        font-size: 8pt;
+        display: block;
+      }
+      .info-value {
+        font-weight: bold;
+        font-size: 9pt;
+      }
+
+      /* Form Sections */
+      .form-section {
+        border: 1px solid #e0e0e0; /* Lighter border */
+        border-radius: 8px; /* Consistent with everything else */
+        padding: 12px;
+        margin-bottom: 15px;
+        background: #f8f8f8; /* Very light gray, almost white */
+      }
+      .section-title {
+        font-weight: bold;
+        font-size: 9pt;
+        margin-bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+      }
+      .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+      }
+      .field.full-width {
+        grid-column: 1 / -1;
+      }
+      .field-labels {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 3px;
+      }
+      .lbl-en {
+        font-size: 7.5pt;
+        font-weight: bold;
+        color: #333;
+      }
+      .lbl-ar {
+        font-size: 7.5pt;
+        font-weight: bold;
+        color: #333;
+      }
+      .field-box {
+        background: white;
+        border: 1px solid #ddd;
+        padding: 6px 8px;
+        min-height: 24px;
+        font-size: 8.5pt;
+        border-radius: 8px; /* Consistent with all other elements */
+      }
+
+      /* Line Items */
+      .items-section {
+        margin-bottom: 20px;
+      }
+      .items-title {
+        font-weight: bold;
+        font-size: 9pt;
+        margin-bottom: 8px;
+        display: flex;
+        justify-content: space-between;
+      }
+      .items-table {
+        width: 100%;
+        border-collapse: separate; /* Use separate to preserve outer border */
+        border-spacing: 0; /* Keep cells touching */
+        border: 1px solid #e0e0e0; /* Outer border - now visible! */
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .items-table th {
+        background: #f5f5f5;
+        border: none;
+        border-bottom: 1px solid #e0e0e0; /* Only bottom border for header */
+        padding: 8px 6px;
+        font-size: 8pt;
+        text-align: center;
+        font-weight: bold;
+      }
+      .items-table td {
+        border: none;
+        border-bottom: 1px solid #e5e5e5; /* Only subtle bottom border between rows */
+        padding: 8px 6px;
+        font-size: 8.5pt;
+        text-align: center;
+      }
+      .items-table tr:last-child td {
+        border-bottom: none; /* Remove border from last row */
+      }
+      .items-table td.desc {
+        text-align: center;
+      }
+
+      /* Totals */
+      .totals-section {
+        border: 1px solid #e0e0e0; /* Lighter border */
+        border-radius: 8px; /* Consistent 8px radius */
+        overflow: hidden;
+      }
+      .total-line {
+        display: flex;
+        border-bottom: 1px solid #e5e5e5; /* Very light */
+      }
+      .total-line:last-child {
+        border-bottom: none;
+        background: #f5f5f5; /* Lighter gray */
+      }
+      .total-label {
+        flex: 2;
+        padding: 10px;
+        background: #f9f9f9; /* Lighter */
+        font-weight: bold;
+        font-size: 8pt;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        text-align: center;
+      }
+      .total-value {
+        flex: 1;
+        padding: 10px;
+        font-weight: bold;
+        font-size: 10pt;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-left: 1px solid #e5e5e5; /* Lighter */
+        background: white;
+      }
+      .total-line:last-child .total-value {
+        background: #f5f5f5; /* Lighter gray */
+      }
+    </style>
+  </head>
+  <body>
+
+    <div class="invoice-container">
+
+      <!-- Header -->
+      <div class="invoice-header">
+        <div>{{invoiceTitleEn}}</div>
+        <div class="ar-title">{{invoiceTitleAr}}</div>
+      </div>
+
+      <!-- Top Section -->
+      <div class="top-section">
+        <div class="invoice-info">
+          <div class="info-field">
+            <span class="info-label">Invoice reference number (IRN)</span>
+            <span class="info-value">{{invoiceNumber}}</span>
+          </div>
+          <div class="info-field">
+            <span class="info-label">Issue Date</span>
+            <span class="info-value">{{issueDate}}</span>
+          </div>
+        </div>
+        <div class="qr-section">
+          {{#if qrCode}}
+            <img src="{{qrCode}}" class="qr-code" />
+          {{/if}}
+        </div>
+        <div class="invoice-info-ar">
+          <div class="info-field">
+            <span class="info-label">الرقم التسلسلي</span>
+            <span class="info-value">{{invoiceNumber}}</span>
+          </div>
+          <div class="info-field">
+            <span class="info-label">تاريخ الإصدار</span>
+            <span class="info-value">{{issueDate}}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Seller Identification -->
+      <div class="form-section">
+        <div class="section-title">
+          <span>Seller Identification</span>
+          <span>هوية المورد</span>
+        </div>
+        <div class="form-grid">
+          <div class="field full-width">
+            <div class="field-labels">
+              <span class="lbl-en">Seller Name</span>
+              <span class="lbl-ar">اسم المورد</span>
+            </div>
+            <div class="field-box">{{sellerName}}</div>
+          </div>
+          <div class="field">
+            <div class="field-labels">
+              <span class="lbl-en">VAT Registration Number</span>
+              <span class="lbl-ar">رقم تسجيل ضريبة القيمة المضافة</span>
+            </div>
+            <div class="field-box">{{sellerVatNumber}}</div>
+          </div>
+          <div class="field">
+            <div class="field-labels">
+              <span class="lbl-en">Additional Seller ID Type</span>
+              <span class="lbl-ar">نوع المعرف الإضافي للمورد</span>
+            </div>
+            <div class="field-box">Commercial Registration (CR)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Address -->
+      <div class="form-section">
+        <div class="section-title">
+          <span>Address</span>
+          <span>العنوان</span>
+        </div>
+        <div class="form-grid">
+          <div class="field full-width">
+            <div class="field-labels">
+              <span class="lbl-en">Street Name</span>
+              <span class="lbl-ar">اسم الشارع</span>
+            </div>
+            <div class="field-box">{{sellerAddress.street}}</div>
+          </div>
+          <div class="field">
+            <div class="field-labels">
+              <span class="lbl-en">Building Number</span>
+              <span class="lbl-ar">رقم المبنى</span>
+            </div>
+            <div class="field-box">{{sellerAddress.buildingNumber}}</div>
+          </div>
+          <div class="field">
+            <div class="field-labels">
+              <span class="lbl-en">City</span>
+              <span class="lbl-ar">المدينة</span>
+            </div>
+            <div class="field-box">{{sellerAddress.city}}</div>
+          </div>
+          <div class="field">
+            <div class="field-labels">
+              <span class="lbl-en">District</span>
+              <span class="lbl-ar">الحي</span>
+            </div>
+            <div class="field-box">{{sellerAddress.district}}</div>
+          </div>
+          <div class="field">
+            <div class="field-labels">
+              <span class="lbl-en">Country Code</span>
+              <span class="lbl-ar">رمز الدولة</span>
+            </div>
+            <div class="field-box">{{sellerAddress.countryCode}}</div>
+          </div>
+          <div class="field">
+            <div class="field-labels">
+              <span class="lbl-en">Postal Code</span>
+              <span class="lbl-ar">الرمز البريدي</span>
+            </div>
+            <div class="field-box">{{sellerAddress.postalCode}}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Line Items -->
+      <div class="items-section">
+        <div class="items-title">
+          <span>Line Items</span>
+          <span>معلومات وبيانات السلعة أو الخدمة</span>
+        </div>
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th>وصف السلعة أو الخدمة<br />Product or Service Description</th>
+              <th>الكمية<br />Quantity</th>
+              <th>معدل ضريبة القيمة المضافة<br />VAT Rate</th>
+              <th>إجمالي المبلغ شامل ضريبة القيمة المضافة<br />Subtotal
+                Inclusive of VAT</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#each items}}
+              <tr>
+                <td class="desc"><strong>{{description}}</strong><br
+                  />{{description}}</td>
+                <td>{{quantity}}</td>
+                <td>{{vatRate}}%</td>
+                <td>{{totalAmount}} SAR</td>
+              </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Totals -->
+      <div class="totals-section">
+        <div class="total-line">
+          <div class="total-label">
+            <span>المبلغ الخاضع للضريبة (غير شامل ضريبة القيمة المضافة)</span>
+            <span>Invoice Taxable Amount</span>
+          </div>
+          <div class="total-value">{{subTotal}} SAR</div>
+        </div>
+        <div class="total-line">
+          <div class="total-label">
+            <span>إجمالي مبلغ ضريبة القيمة المضافة</span>
+            <span>VAT Total Amount</span>
+          </div>
+          <div class="total-value">{{vatAmount}} SAR</div>
+        </div>
+        <div class="total-line">
+          <div class="total-label">
+            <span>إجمالي قيمة الفاتورة (شامل ضريبة القيمة المضافة)</span>
+            <span>Invoice Gross Total (Inclusive of VAT)</span>
+          </div>
+          <div class="total-value">{{totalAmount}} SAR</div>
+        </div>
+      </div>
+
+    </div>
+
+  </body>
+</html>

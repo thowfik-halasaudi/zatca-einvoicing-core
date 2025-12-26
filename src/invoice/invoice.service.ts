@@ -364,15 +364,25 @@ export class InvoiceService {
           // EGS Reference
           commonName: egs.commonName,
 
-          // Seller Info (from request DTO with combined address)
+          // Seller Info (detailed address)
           sellerName: supplier.registrationName,
           sellerVatNumber: supplier.vatNumber,
-          sellerAddress: formatAddress(supplier.address),
+          sellerStreet: supplier.address.street || "Unknown",
+          sellerBuildingNumber: supplier.address.buildingNumber || "0000",
+          sellerCity: supplier.address.city || "Riyadh",
+          sellerDistrict: supplier.address.district || "District",
+          sellerCountryCode: supplier.address.country || "SA",
+          sellerPostalCode: supplier.address.postalCode || "00000",
 
-          // Buyer Info (Optional for B2C with combined address)
+          // Buyer Info (Optional for B2C)
           buyerName: customer?.name || null,
           buyerVatNumber: customer?.vatNumber || null,
-          buyerAddress: formatAddress(customer?.address),
+          buyerStreet: customer?.address?.street || null,
+          buyerBuildingNumber: customer?.address?.buildingNumber || null,
+          buyerCity: customer?.address?.city || null,
+          buyerDistrict: customer?.address?.district || null,
+          buyerCountryCode: customer?.address?.country || null,
+          buyerPostalCode: customer?.address?.postalCode || null,
 
           // References (for Credit/Debit Notes)
           referenceInvoiceNumber: invoice.billingReferenceId || null,
