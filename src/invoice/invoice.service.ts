@@ -9,6 +9,8 @@ import {
   Logger,
   BadRequestException,
   NotFoundException,
+  Inject,
+  forwardRef,
 } from "@nestjs/common";
 import { CliExecutorService } from "../common/cli-executor.service";
 import { FileManagerService } from "../common/file-manager.service";
@@ -31,6 +33,7 @@ export class InvoiceService {
     private readonly xmlTemplate: XmlTemplateService,
     private readonly sequenceService: SequenceService,
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => ComplianceService))
     private readonly complianceService: ComplianceService,
     private readonly invoiceRepository: InvoiceRepository
   ) {}
@@ -87,13 +90,13 @@ export class InvoiceService {
       "-----END CERTIFICATE-----"
     );
 
-    // Persist to onboarding folder to keep CLI contract unchanged
-    const keyPath = await this.fileManager.writeOnboardingFile(
+    // Write keys to TEMP directory for the CLI session (secure & ephemeral)
+    const keyPath = await this.fileManager.writeTempFile(
       commonName,
       "egs-signing-key.pem",
       keyPem
     );
-    const certPath = await this.fileManager.writeOnboardingFile(
+    const certPath = await this.fileManager.writeTempFile(
       commonName,
       "ccsid-certificate.pem",
       certPem
@@ -177,6 +180,8 @@ export class InvoiceService {
       // CLEANUP: Remove temporary files to avoid storage
       try {
         if (unsignedPath) await this.fileManager.deleteTemp(unsignedPath);
+        if (keyPath) await this.fileManager.deleteTemp(keyPath);
+        if (certPath) await this.fileManager.deleteTemp(certPath);
         if (signedPath && (await this.fileManager.exists(signedPath))) {
           await this.fileManager.deleteTemp(signedPath);
         }

@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 import { ComplianceService } from "./compliance.service";
 import { CryptographyModule } from "../cryptography/cryptography.module";
 import { ComplianceController } from "./compliance.controller";
@@ -13,7 +13,12 @@ import { InvoiceModule } from "../invoice/invoice.module"; // For InvoiceReposit
  * Handles ZATCA compliance operations (onboarding)
  */
 @Module({
-  imports: [CryptographyModule, ZatcaModule, CommonModule, InvoiceModule],
+  imports: [
+    CryptographyModule,
+    ZatcaModule,
+    CommonModule,
+    forwardRef(() => InvoiceModule),
+  ],
   controllers: [ComplianceController],
   providers: [ComplianceService, ComplianceRepository],
   exports: [ComplianceService],

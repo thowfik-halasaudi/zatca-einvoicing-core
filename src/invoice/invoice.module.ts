@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 import { InvoiceController } from "./invoice.controller";
 import { InvoiceService } from "./invoice.service";
 import { XmlTemplateService } from "./xml-template.service";
@@ -9,7 +9,7 @@ import { ComplianceModule } from "../compliance/compliance.module";
 import { InvoiceRepository } from "./invoice.repository";
 
 @Module({
-  imports: [CommonModule, ComplianceModule],
+  imports: [CommonModule, forwardRef(() => ComplianceModule)],
   controllers: [InvoiceController],
   providers: [
     InvoiceService,

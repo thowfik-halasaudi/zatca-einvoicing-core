@@ -14,11 +14,9 @@ import * as path from "path";
 export class FileManagerService implements OnModuleInit {
   private readonly logger = new Logger(FileManagerService.name);
   private readonly tmpDir = path.join(process.cwd(), "tmp");
-  private readonly onboardingDir = path.join(process.cwd(), "onboarding_data");
 
   async onModuleInit() {
     await this.ensureDir(this.tmpDir);
-    await this.ensureDir(this.onboardingDir);
   }
 
   /**
@@ -125,43 +123,6 @@ export class FileManagerService implements OnModuleInit {
   }
 
   /**
-   * Get the absolute path for an onboarding directory
-   */
-  async getOnboardingDir(commonName: string): Promise<string> {
-    const dirPath = path.join(
-      this.onboardingDir,
-      commonName.toLowerCase().replace(/\s+/g, "_")
-    );
-    await this.ensureDir(dirPath);
-    return dirPath;
-  }
-
-  /**
-   * Write content to a file in an onboarding directory
-   */
-  async writeOnboardingFile(
-    commonName: string,
-    filename: string,
-    content: string
-  ): Promise<string> {
-    const dirPath = await this.getOnboardingDir(commonName);
-    const filePath = path.join(dirPath, filename);
-    await fs.writeFile(filePath, content, "utf-8");
-    return filePath;
-  }
-
-  /**
-   * Get path for a file in onboarding directory (does not write)
-   */
-  getOnboardingFilePath(commonName: string, filename: string): string {
-    const dirPath = path.join(
-      this.onboardingDir,
-      commonName.toLowerCase().replace(/\s+/g, "_")
-    );
-    return path.join(dirPath, filename);
-  }
-
-  /**
    * Get the absolute path for a temporary directory grouped by commonName
    */
   async getTempDir(commonName: string): Promise<string> {
@@ -185,54 +146,5 @@ export class FileManagerService implements OnModuleInit {
     const filePath = path.join(dirPath, filename);
     await fs.writeFile(filePath, content, "utf-8");
     return filePath;
-  }
-  /**
-   * List all directories in the onboarding_data folder
-   */
-  async listOnboardingDirectories(): Promise<string[]> {
-    try {
-      const items = await fs.readdir(this.onboardingDir);
-      const dirs: string[] = [];
-      for (const item of items) {
-        const fullPath = path.join(this.onboardingDir, item);
-        const stats = await fs.stat(fullPath);
-        if (stats.isDirectory()) {
-          dirs.push(item);
-        }
-      }
-      return dirs;
-    } catch (error: any) {
-      this.logger.error(
-        `Failed to list onboarding directories: ${error.message}`
-      );
-      return [];
-    }
-  }
-  /**
-   * Read and parse properties file from onboarding directory
-   */
-  async readOnboardingConfig(dirName: string): Promise<Record<string, string>> {
-    const filePath = path.join(
-      this.onboardingDir,
-      dirName,
-      "onboarding-config.properties"
-    );
-    try {
-      if (!(await this.exists(filePath))) return {};
-      const content = await this.readFile(filePath);
-      const config: Record<string, string> = {};
-      content.split("\n").forEach((line) => {
-        const [key, ...values] = line.split("=");
-        if (key && values.length > 0) {
-          config[key.trim()] = values.join("=").trim();
-        }
-      });
-      return config;
-    } catch (error: any) {
-      this.logger.error(
-        `Failed to read config for ${dirName}: ${error.message}`
-      );
-      return {};
-    }
   }
 }
